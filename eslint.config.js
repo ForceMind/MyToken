@@ -10,7 +10,7 @@ export default tseslint.config(
   ...tseslint.configs.recommendedTypeChecked,
   eslintConfigPrettier,
   {
-    files: ["**/*.ts"],
+    files: ["**/*.{ts,tsx}"],
     languageOptions: {
       parserOptions: {
         projectService: true,

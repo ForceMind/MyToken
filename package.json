@@ -11,10 +11,11 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && npm run build --workspace apps/web",
     "start:api": "node apps/api/dist/main.js",
     "start:worker": "node apps/worker/dist/main.js",
-    "typecheck": "tsc -b --pretty false",
+    "dev:preview": "tsx scripts/dev-preview.ts",
+    "typecheck": "tsc -b --pretty false && tsc -p apps/web/tsconfig.json --noEmit --pretty false",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -23,13 +23,14 @@ Implemented and verified offline:
 - one-time administrator Bootstrap, Argon2id login, server-side Session, and CSRF;
 - separate API/worker startup entrypoints with Unix-socket transport;
 - Linux systemd, tmpfiles, credential, and secret-generation templates.
+- React/Vite/Tailwind management console for setup, login, Codex connection, and Key management.
 
 Not yet complete:
 
-- management console;
 - live Codex login and live dynamic-tool smoke tests;
 - Linux/systemd verification;
 - real OpenClaw E2E.
+- automated browser E2E.
 
 ## Security boundary
 

@@ -28,4 +28,8 @@ export class MemoryApiKeyStore implements ApiKeyStore, ApiKeyManagementStore {
     this.#records.set(keyId, { ...record, revokedAt: record.revokedAt ?? now });
     return true;
   }
+
+  list(): Promise<readonly MyTokenKeyRecord[]> {
+    return Promise.resolve([...this.#records.values()]);
+  }
 }

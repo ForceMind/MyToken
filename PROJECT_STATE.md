@@ -24,6 +24,8 @@
 - One-time Bootstrap, Argon2id administrator passwords, digest-only server sessions, CSRF, and admin key issuance are implemented.
 - API and worker have separate production entrypoints and communicate through a bounded Unix-socket client.
 - systemd, tmpfiles, systemd credential injection, secret generation, and deployment guidance are present but not live-verified.
+- React/Vite/Tailwind management console implements setup, login, overview, Codex status/device login, Key management, and system status.
+- The built console was exercised through the real Fastify static server in the in-app browser with no browser console errors; automated Playwright coverage remains pending.
 
 ## Not yet verified
 
@@ -32,7 +34,7 @@
 - Production streaming from live app-server rather than buffered fixture output.
 - Linux/systemd hardening.
 - Real OpenClaw E2E.
-- Management web console and browser E2E.
+- Automated Playwright browser E2E.
 - Durable response and pending-tool-call recovery across API restarts.
 
 ## Completion rule

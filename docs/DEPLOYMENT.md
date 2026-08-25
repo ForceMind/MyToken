@@ -47,6 +47,7 @@ NODE_ENV=production
 MYTOKEN_VERSION=0.1.0
 MYTOKEN_HOST=127.0.0.1
 MYTOKEN_PORT=8080
+MYTOKEN_WEB_ROOT=/opt/mytoken/apps/web/dist
 MYTOKEN_DB_PATH=/var/lib/mytoken/api/mytoken.sqlite
 MYTOKEN_WORKER_SOCKET=/run/mytoken/worker.sock
 MYTOKEN_CODEX_BIN=/usr/local/bin/codex

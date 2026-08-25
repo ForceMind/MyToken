@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 import { AdminAuthService, bootstrapTokenFromPlaintext } from "@mytoken/admin-auth";
 import { AdminAuthRepository, ApiKeyRepository, MyTokenDatabase } from "@mytoken/database";
@@ -32,8 +33,11 @@ const app = await createApiApp({
   keyManagementStore: keyRepository,
   keyPepper,
   adminAuth,
+  codexAdminBackend: backend,
   cookieSecure: process.env.NODE_ENV === "production",
   logger: false,
+  staticRoot:
+    process.env.MYTOKEN_WEB_ROOT ?? fileURLToPath(new URL("../../web/dist", import.meta.url)),
 });
 const host = process.env.MYTOKEN_HOST ?? "127.0.0.1";
 const port = numberEnv("MYTOKEN_PORT", 8080);

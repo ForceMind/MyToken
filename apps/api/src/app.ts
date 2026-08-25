@@ -1,6 +1,7 @@
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import staticFiles from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 
 import type { AdminAuthService } from "@mytoken/admin-auth";
@@ -14,7 +15,11 @@ import {
   type ResponseMessageItem,
 } from "@mytoken/openai-compat";
 
-import { registerAdminRoutes, type ApiKeyManagementStore } from "./admin-routes.js";
+import {
+  registerAdminRoutes,
+  type ApiKeyManagementStore,
+  type CodexAdminBackend,
+} from "./admin-routes.js";
 
 export interface GatewayModel {
   id: string;
@@ -41,7 +46,9 @@ export interface CreateApiAppOptions {
   keyPepper: Uint8Array;
   adminAuth?: AdminAuthService;
   keyManagementStore?: ApiKeyManagementStore;
+  codexAdminBackend?: CodexAdminBackend;
   cookieSecure?: boolean;
+  staticRoot?: string;
   logger?: boolean;
 }
 
@@ -73,6 +80,19 @@ export async function createApiApp(options: CreateApiAppOptions): Promise<Fastif
     max: 60,
     timeWindow: "1 minute",
   });
+  app.setErrorHandler((error, _request, reply) => {
+    const candidate = isRecord(error) ? error.statusCode : undefined;
+    const status = typeof candidate === "number" && candidate >= 400 ? candidate : 500;
+    if (status === 429) {
+      sendError(reply, 429, "Rate limit exceeded", "rate_limit_exceeded", "rate_limit_error");
+      return;
+    }
+    if (status >= 500) {
+      sendError(reply, 500, "Internal gateway error", "internal_error", "api_error");
+      return;
+    }
+    sendError(reply, status, "Request was rejected", "request_rejected");
+  });
 
   if (options.adminAuth && options.keyManagementStore) {
     registerAdminRoutes(app, {
@@ -80,6 +100,18 @@ export async function createApiApp(options: CreateApiAppOptions): Promise<Fastif
       keyStore: options.keyManagementStore,
       keyPepper: options.keyPepper,
       cookieSecure: options.cookieSecure ?? true,
+      ...(options.codexAdminBackend ? { codexBackend: options.codexAdminBackend } : {}),
+    });
+  }
+
+  if (options.staticRoot) {
+    await app.register(staticFiles, {
+      root: options.staticRoot,
+      prefix: "/",
+      wildcard: false,
+      cacheControl: true,
+      maxAge: "1h",
+      immutable: false,
     });
   }
 
@@ -161,6 +193,20 @@ export async function createApiApp(options: CreateApiAppOptions): Promise<Fastif
     }
     return reply.send(response);
   });
+
+  if (options.staticRoot) {
+    app.setNotFoundHandler((request, reply) => {
+      if (
+        request.method === "GET" &&
+        !request.url.startsWith("/api/") &&
+        !request.url.startsWith("/v1/")
+      ) {
+        reply.header("Cache-Control", "no-cache");
+        return reply.sendFile("index.html");
+      }
+      return sendError(reply, 404, "Route was not found", "not_found");
+    });
+  }
 
   return app;
 }
@@ -252,4 +298,8 @@ function appendFunctionCallEvents(
     output_index: outputIndex,
     arguments: item.arguments,
   });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

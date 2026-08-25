@@ -63,6 +63,26 @@ export class WorkerSocketBackend implements GatewayBackend {
     })) as GatewayResponse;
   }
 
+  account(): Promise<unknown> {
+    return this.#request("GET", "/internal/account");
+  }
+
+  rateLimits(): Promise<unknown> {
+    return this.#request("GET", "/internal/account/rate-limits");
+  }
+
+  startDeviceLogin(): Promise<unknown> {
+    return this.#request("POST", "/internal/account/login/device/start", {});
+  }
+
+  cancelDeviceLogin(loginId: string): Promise<unknown> {
+    return this.#request("POST", "/internal/account/login/cancel", { loginId });
+  }
+
+  logoutAccount(): Promise<unknown> {
+    return this.#request("POST", "/internal/account/logout", {});
+  }
+
   #request(method: string, path: string, body?: unknown): Promise<unknown> {
     const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body), "utf8");
     return new Promise((resolve, reject) => {

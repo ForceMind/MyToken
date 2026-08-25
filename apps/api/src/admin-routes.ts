@@ -16,6 +16,15 @@ import type { ApiKeyStore } from "./app.js";
 export interface ApiKeyManagementStore extends ApiKeyStore {
   create(record: MyTokenKeyRecord): void;
   revoke(keyId: string, now?: number): boolean;
+  list(): Promise<readonly MyTokenKeyRecord[]>;
+}
+
+export interface CodexAdminBackend {
+  account(): Promise<unknown>;
+  rateLimits(): Promise<unknown>;
+  startDeviceLogin(): Promise<unknown>;
+  cancelDeviceLogin(loginId: string): Promise<unknown>;
+  logoutAccount(): Promise<unknown>;
 }
 
 export interface RegisterAdminRoutesOptions {
@@ -23,6 +32,7 @@ export interface RegisterAdminRoutesOptions {
   keyStore: ApiKeyManagementStore;
   keyPepper: Uint8Array;
   cookieSecure: boolean;
+  codexBackend?: CodexAdminBackend;
 }
 
 const setupSchema = z
@@ -167,6 +177,30 @@ export function registerAdminRoutes(
     });
   });
 
+  app.get("/api/admin/keys", async (request, reply) => {
+    noStore(reply);
+    const session = authenticateAdmin(request, reply, options, cookieName);
+    if (!session) return;
+    const records = await options.keyStore.list();
+    return {
+      data: records.map((record) => ({
+        id: record.id,
+        mode: record.mode,
+        name: record.name,
+        prefix: record.prefix,
+        createdAt: record.createdAt,
+        expiresAt: record.expiresAt,
+        revokedAt: record.revokedAt,
+        lastUsedAt: record.lastUsedAt,
+        allowedModels: record.allowedModels,
+        allowClientTools: record.allowClientTools,
+        rpmLimit: record.rpmLimit,
+        dailyRequestLimit: record.dailyRequestLimit,
+        maxConcurrency: record.maxConcurrency,
+      })),
+    };
+  });
+
   app.post("/api/admin/keys/:keyId/revoke", async (request, reply) => {
     noStore(reply);
     const session = authenticateAdmin(request, reply, options, cookieName, true);
@@ -176,6 +210,46 @@ export function registerAdminRoutes(
       return adminError(reply, 404, "Key was not found", "key_not_found");
     }
     return { revoked: true };
+  });
+
+  if (options.codexBackend) registerCodexRoutes(app, options, cookieName);
+}
+
+function registerCodexRoutes(
+  app: FastifyInstance,
+  options: RegisterAdminRoutesOptions & { codexBackend?: CodexAdminBackend },
+  cookieName: string,
+): void {
+  const backend = options.codexBackend;
+  if (!backend) return;
+  app.get("/api/admin/codex", async (request, reply) => {
+    noStore(reply);
+    const session = authenticateAdmin(request, reply, options, cookieName);
+    if (!session) return;
+    const [account, rateLimits] = await Promise.all([backend.account(), backend.rateLimits()]);
+    return { account: normalizeAccount(account), rateLimits: normalizeRateLimits(rateLimits) };
+  });
+  app.post("/api/admin/codex/login", async (request, reply) => {
+    noStore(reply);
+    const session = authenticateAdmin(request, reply, options, cookieName, true);
+    if (!session) return;
+    return backend.startDeviceLogin();
+  });
+  app.post("/api/admin/codex/login/cancel", async (request, reply) => {
+    noStore(reply);
+    const session = authenticateAdmin(request, reply, options, cookieName, true);
+    if (!session) return;
+    const body = request.body;
+    if (!isRecord(body) || typeof body.loginId !== "string") {
+      return adminError(reply, 400, "loginId is required", "invalid_login_id");
+    }
+    return backend.cancelDeviceLogin(body.loginId);
+  });
+  app.post("/api/admin/codex/logout", async (request, reply) => {
+    noStore(reply);
+    const session = authenticateAdmin(request, reply, options, cookieName, true);
+    if (!session) return;
+    return backend.logoutAccount();
   });
 }
 
@@ -226,4 +300,58 @@ function noStore(reply: FastifyReply): void {
 
 function fingerprint(value: string | undefined): string | null {
   return value ? createHash("sha256").update(value).digest("base64url") : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeAccount(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) return { connected: false, status: "unknown" };
+  const account = isRecord(value.account) ? value.account : undefined;
+  const type = account && typeof account.type === "string" ? account.type : null;
+  const planType = account && typeof account.planType === "string" ? account.planType : null;
+  const email = account && typeof account.email === "string" ? account.email : null;
+  return {
+    connected: Boolean(account),
+    authMode: type,
+    planType,
+    emailMasked: email ? maskEmail(email) : null,
+    requiresOpenaiAuth:
+      typeof value.requiresOpenaiAuth === "boolean" ? value.requiresOpenaiAuth : null,
+    observedAt: Date.now(),
+  };
+}
+
+function normalizeRateLimits(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) return { available: false, observedAt: Date.now() };
+  const limits = isRecord(value.rateLimits) ? value.rateLimits : undefined;
+  const primary = limits && isRecord(limits.primary) ? limits.primary : undefined;
+  const secondary = limits && isRecord(limits.secondary) ? limits.secondary : undefined;
+  return {
+    available: Boolean(limits),
+    primary: normalizeWindow(primary),
+    secondary: normalizeWindow(secondary),
+    observedAt: Date.now(),
+  };
+}
+
+function normalizeWindow(
+  value: Record<string, unknown> | undefined,
+): Record<string, unknown> | null {
+  if (!value) return null;
+  return {
+    usedPercent: typeof value.usedPercent === "number" ? value.usedPercent : null,
+    windowDurationMins:
+      typeof value.windowDurationMins === "number" ? value.windowDurationMins : null,
+    resetsAt: typeof value.resetsAt === "number" ? value.resetsAt : null,
+  };
+}
+
+function maskEmail(email: string): string {
+  const separator = email.indexOf("@");
+  if (separator <= 0) return "***";
+  const local = email.slice(0, separator);
+  const domain = email.slice(separator + 1);
+  return `${local.slice(0, 1)}***@${domain}`;
 }

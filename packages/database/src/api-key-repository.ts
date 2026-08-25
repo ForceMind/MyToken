@@ -61,6 +61,13 @@ export class ApiKeyRepository {
       .run();
     return result.changes > 0;
   }
+
+  list(): Promise<readonly MyTokenKeyRecord[]> {
+    const rows = this.database.db.select().from(apiKeys).all();
+    return Promise.all(rows.map(async (row) => this.getById(row.id))).then((records) =>
+      records.filter((record): record is MyTokenKeyRecord => record !== undefined),
+    );
+  }
 }
 
 function parseStringArray(value: string): string[] {
