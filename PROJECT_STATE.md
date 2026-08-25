@@ -18,6 +18,8 @@
 - A bounded JSONL JSON-RPC client completes initialize, normal request, notification, and server-request flows.
 - The deterministic fixture completes `function_call -> function_call_output -> final answer` on the same simulated turn.
 - HMAC MyToken keys, model policy, client-tool policy, Responses validation, and SSE function-call encoding have automated tests.
+- The worker exposes a fixed internal route allowlist; arbitrary JSON-RPC passthrough is absent and tested.
+- Twenty automated tests pass, including a two-request OpenClaw tool loop through the worker's internal HTTP contract.
 
 ## Not yet verified
 
