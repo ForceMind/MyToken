@@ -1,0 +1,152 @@
+#!/bin/sh
+set -eu
+
+environment_file="${MYTOKEN_ENV_FILE:-/etc/mytoken/mytoken.env}"
+install_dir="${MYTOKEN_INSTALL_DIR:-/opt/mytoken}"
+
+as_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  else
+    sudo "$@"
+  fi
+}
+
+env_value() {
+  key="$1"
+  if [ ! -r "$environment_file" ]; then
+    as_root awk -F= -v wanted="$key" '$1 == wanted { sub(/^[^=]*=/, ""); print; exit }' "$environment_file"
+  else
+    awk -F= -v wanted="$key" '$1 == wanted { sub(/^[^=]*=/, ""); print; exit }' "$environment_file"
+  fi
+}
+
+usage() {
+  cat <<'EOF'
+Usage: mytokenctl COMMAND [ARG]
+
+Commands:
+  status                  Show service and endpoint status
+  start|stop|restart      Control both services
+  logs [api|worker|all]   Follow service logs
+  health                  Query /healthz
+  ready                   Query /readyz
+  codex-status            Show Codex authentication method (never tokens)
+  permissions             Show important ownership and modes
+  doctor                  Show non-sensitive runtime versions and paths
+  db-check                Run SQLite integrity_check
+  backup                  Create a consistent stopped-service DB backup
+  bootstrap-token         Print the one-time bootstrap token to this terminal
+  deploy [SOURCE_DIR]     Run the one-click installer from a source tree
+  version                 Show deployed MyToken version
+EOF
+}
+
+command_name="${1:-help}"
+case "$command_name" in
+  status)
+    as_root systemctl status --no-pager mytoken-worker.service mytoken-api.service || true
+    "$0" health || true
+    "$0" ready || true
+    ;;
+  start|stop|restart)
+    as_root systemctl "$command_name" mytoken-worker.service mytoken-api.service
+    ;;
+  logs)
+    target="${2:-all}"
+    case "$target" in
+      api) as_root journalctl -u mytoken-api.service -f ;;
+      worker) as_root journalctl -u mytoken-worker.service -f ;;
+      all) as_root journalctl -u mytoken-api.service -u mytoken-worker.service -f ;;
+      *) printf '%s\n' "Unknown log target: $target" >&2; exit 2 ;;
+    esac
+    ;;
+  health)
+    curl --fail --show-error --silent http://127.0.0.1:8080/healthz
+    printf '\n'
+    ;;
+  ready)
+    curl --fail --show-error --silent http://127.0.0.1:8080/readyz
+    printf '\n'
+    ;;
+  codex-status)
+    codex_bin="$(env_value MYTOKEN_CODEX_BIN)"
+    codex_home="$(env_value MYTOKEN_CODEX_HOME)"
+    as_root runuser -u mytoken-codex -- env \
+      HOME="$codex_home" CODEX_HOME="$codex_home" \
+      PATH=/usr/local/bin:/usr/bin:/bin \
+      "$codex_bin" login status
+    ;;
+  permissions)
+    as_root stat -c '%A %U:%G %n' \
+      /etc/mytoken /etc/mytoken/secrets \
+      /var/lib/mytoken/api /var/lib/mytoken/codex /var/lib/mytoken/workspace \
+      /run/mytoken /run/mytoken/worker.sock
+    ;;
+  doctor)
+    printf 'MyToken version: '; "$0" version
+    printf 'Node: '; node --version
+    printf 'npm: '; npm --version
+    codex_bin="$(env_value MYTOKEN_CODEX_BIN)"
+    printf 'Codex: '; "$codex_bin" --version
+    printf 'Worker socket: %s\n' "$(env_value MYTOKEN_WORKER_SOCKET)"
+    printf 'Database: %s\n' "$(env_value MYTOKEN_DB_PATH)"
+    "$0" health
+    "$0" ready || true
+    ;;
+  db-check)
+    database_path="$(env_value MYTOKEN_DB_PATH)"
+    as_root runuser -u mytoken-api -- env MYTOKEN_DB_PATH="$database_path" \
+      /usr/bin/env node -e '
+        const { DatabaseSync } = require("node:sqlite");
+        const db = new DatabaseSync(process.env.MYTOKEN_DB_PATH, { readOnly: true });
+        const row = db.prepare("PRAGMA integrity_check").get();
+        db.close();
+        if (row.integrity_check !== "ok") process.exit(1);
+        console.log(JSON.stringify({ integrity: "ok" }));
+      '
+    ;;
+  backup)
+    database_path="$(env_value MYTOKEN_DB_PATH)"
+    if [ ! -f "$database_path" ]; then
+      printf '%s\n' "Database does not exist: $database_path" >&2
+      exit 1
+    fi
+    api_active=false
+    as_root systemctl is-active --quiet mytoken-api.service && api_active=true
+    if [ "$api_active" = "true" ]; then as_root systemctl stop mytoken-api.service; fi
+    backup_dir="$(dirname -- "$database_path")/backups"
+    as_root install -d -o mytoken-api -g mytoken-api -m 0700 "$backup_dir"
+    backup_path="$backup_dir/manual-$(date -u +%Y%m%dT%H%M%SZ).sqlite"
+    if ! as_root cp --preserve=mode,ownership,timestamps "$database_path" "$backup_path"; then
+      if [ "$api_active" = "true" ]; then as_root systemctl start mytoken-api.service; fi
+      printf '%s\n' "Database backup failed" >&2
+      exit 1
+    fi
+    if [ "$api_active" = "true" ]; then as_root systemctl start mytoken-api.service; fi
+    printf '%s\n' "$backup_path"
+    ;;
+  bootstrap-token)
+    printf '%s\n' "Sensitive: this token is displayed only in your current terminal." >&2
+    as_root cat /etc/mytoken/secrets/bootstrap-token
+    printf '\n'
+    ;;
+  deploy)
+    source_dir="${2:-/srv/mytoken-src}"
+    if [ ! -x "$source_dir/deploy/install.sh" ]; then
+      printf '%s\n' "Installer not found: $source_dir/deploy/install.sh" >&2
+      exit 1
+    fi
+    as_root env MYTOKEN_SOURCE_DIR="$source_dir" "$source_dir/deploy/install.sh"
+    ;;
+  version)
+    node -e 'const p=require(process.argv[1]); console.log(p.version)' "$install_dir/package.json"
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

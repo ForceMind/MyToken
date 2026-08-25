@@ -43,6 +43,8 @@ See [Architecture](docs/ARCHITECTURE.md), [Threat Model](docs/THREAT_MODEL.md), 
 
 For moving this branch to a Linux server and continuing development with Codex there, see [Server Handoff](docs/SERVER_HANDOFF.md).
 
+For the one-click installer and terminal command reference, see [Terminal Operations](docs/OPERATIONS.md).
+
 ## Development
 
 Requirements:

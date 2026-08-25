@@ -157,6 +157,15 @@ Do not place the Session Secret, Key Pepper, Bootstrap Token, Codex Token, or Cl
 
 ## 7. Install and start services
 
+The shortest supported path performs the build, checks, service-user setup, runtime staging, unit installation, restart, and health wait:
+
+```bash
+cd /srv/mytoken-src
+sudo ./deploy/install.sh
+```
+
+The manual commands below remain useful for auditing or repairing individual steps.
+
 ```bash
 sudo install -m 0644 deploy/systemd/mytoken-worker.service /etc/systemd/system/
 sudo install -m 0644 deploy/systemd/mytoken-api.service /etc/systemd/system/

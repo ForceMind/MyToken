@@ -9,8 +9,8 @@ create_secret() {
   destination="$1"
   prefix="$2"
   if [ -e "$destination" ]; then
-    printf '%s\n' "Refusing to overwrite existing secret: $destination" >&2
-    return 1
+    printf '%s\n' "Preserving existing secret: $destination"
+    return 0
   fi
   random_value="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
   printf '%s%s' "$prefix" "$random_value" > "$destination"
@@ -21,5 +21,5 @@ create_secret "$secret_dir/session-secret" ""
 create_secret "$secret_dir/key-pepper" ""
 create_secret "$secret_dir/bootstrap-token" "myb_"
 
-printf '%s\n' "Secrets created under $secret_dir"
+printf '%s\n' "Secrets are ready under $secret_dir"
 printf '%s\n' "Read bootstrap-token once on the trusted server and enter it on the setup page."
