@@ -42,6 +42,8 @@ export class CodexResponseCoordinator {
   readonly #workspace: string | undefined;
   readonly #sessionsByResponse = new Map<string, ActiveSession>();
   readonly #sessionsByTurn = new Map<string, ActiveSession>();
+  readonly #orphanSignals = new Map<string, SessionSignal[]>();
+  readonly #orphanText = new Map<string, string>();
 
   constructor(
     client: CodexAppServerClient,
@@ -54,8 +56,7 @@ export class CodexResponseCoordinator {
     this.#workspace = options.workspace;
 
     broker.on("toolCall", (event: ToolCallEvent) => {
-      const session = this.#sessionsByTurn.get(turnKey(event.threadId, event.turnId));
-      if (session) this.#signal(session, { type: "tool", event });
+      this.#queueOrSignal(turnKey(event.threadId, event.turnId), { type: "tool", event });
     });
     client.onNotification("item/agentMessage/delta", (params) => this.#onAgentDelta(params));
     client.onNotification("turn/completed", (params) => this.#onTurnCompleted(params));
@@ -140,7 +141,12 @@ export class CodexResponseCoordinator {
       signals: [],
       waiter: undefined,
     };
-    this.#sessionsByTurn.set(turnKey(threadId, turnId), session);
+    const key = turnKey(threadId, turnId);
+    this.#sessionsByTurn.set(key, session);
+    session.text = this.#orphanText.get(key) ?? "";
+    this.#orphanText.delete(key);
+    session.signals.push(...(this.#orphanSignals.get(key) ?? []));
+    this.#orphanSignals.delete(key);
     return this.#waitAndBuild(session);
   }
 
@@ -265,14 +271,27 @@ export class CodexResponseCoordinator {
     }
   }
 
+  #queueOrSignal(key: string, signal: SessionSignal): void {
+    const session = this.#sessionsByTurn.get(key);
+    if (session) {
+      this.#signal(session, signal);
+      return;
+    }
+    const signals = this.#orphanSignals.get(key) ?? [];
+    signals.push(signal);
+    this.#orphanSignals.set(key, signals);
+  }
+
   #onAgentDelta(params: unknown): void {
     if (!isRecord(params)) return;
     const threadId = stringValue(params.threadId);
     const turnId = stringValue(params.turnId);
     const delta = stringValue(params.delta);
     if (!threadId || !turnId || delta === undefined) return;
-    const session = this.#sessionsByTurn.get(turnKey(threadId, turnId));
+    const key = turnKey(threadId, turnId);
+    const session = this.#sessionsByTurn.get(key);
     if (session) session.text += delta;
+    else this.#orphanText.set(key, `${this.#orphanText.get(key) ?? ""}${delta}`);
   }
 
   #onTurnCompleted(params: unknown): void {
@@ -280,9 +299,7 @@ export class CodexResponseCoordinator {
     const threadId = stringValue(params.threadId);
     const turnId = stringValue(params.turn.id);
     if (!threadId || !turnId) return;
-    const session = this.#sessionsByTurn.get(turnKey(threadId, turnId));
-    if (!session) return;
-    this.#signal(session, {
+    this.#queueOrSignal(turnKey(threadId, turnId), {
       type: "completed",
       status: stringValue(params.turn.status) ?? "failed",
       error: params.turn.error,
@@ -295,8 +312,7 @@ export class CodexResponseCoordinator {
     const turnId = stringValue(params.turnId);
     const itemType = stringValue(params.item.type);
     if (!threadId || !turnId || !itemType || !dangerousItemTypes.has(itemType)) return;
-    const session = this.#sessionsByTurn.get(turnKey(threadId, turnId));
-    if (session) this.#signal(session, { type: "security", itemType });
+    this.#queueOrSignal(turnKey(threadId, turnId), { type: "security", itemType });
   }
 
   async #interrupt(session: ActiveSession): Promise<void> {

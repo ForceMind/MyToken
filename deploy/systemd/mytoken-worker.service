@@ -8,7 +8,8 @@ Type=simple
 User=mytoken-codex
 Group=mytoken
 EnvironmentFile=/etc/mytoken/mytoken.env
-ExecStart=/usr/bin/node /opt/mytoken/apps/worker/dist/main.js
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node /opt/mytoken/apps/worker/dist/main.js
 Restart=on-failure
 RestartSec=5s
 StartLimitIntervalSec=60

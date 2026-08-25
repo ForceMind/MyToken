@@ -41,6 +41,8 @@ OpenClaw client tools are represented as app-server dynamic tools, but they are 
 
 See [Architecture](docs/ARCHITECTURE.md), [Threat Model](docs/THREAT_MODEL.md), and [API Compatibility](docs/API_COMPATIBILITY.md).
 
+For moving this branch to a Linux server and continuing development with Codex there, see [Server Handoff](docs/SERVER_HANDOFF.md).
+
 ## Development
 
 Requirements:
