@@ -14,6 +14,12 @@ export default defineConfig({
       "@mytoken/openai-compat": fileURLToPath(
         new URL("./packages/openai-compat/src/index.ts", import.meta.url),
       ),
+      "@mytoken/admin-auth": fileURLToPath(
+        new URL("./packages/admin-auth/src/index.ts", import.meta.url),
+      ),
+      "@mytoken/database": fileURLToPath(
+        new URL("./packages/database/src/index.ts", import.meta.url),
+      ),
     },
   },
   test: {

@@ -6,5 +6,11 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../../packages/key-auth" }, { "path": "../../packages/openai-compat" }]
+  "references": [
+    { "path": "../../packages/admin-auth" },
+    { "path": "../../packages/database" },
+    { "path": "../../packages/key-auth" },
+    { "path": "../../packages/openai-compat" },
+    { "path": "../../packages/shared" }
+  ]
 }

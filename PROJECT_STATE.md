@@ -2,7 +2,7 @@
 
 ## Current state
 
-- Phase: Gate 2 — Responses API foundation
+- Phase: Gate 3 — clients, UI, and live operations
 - Repository implementation at start: none (license only)
 - Development platform: macOS
 - Target production platform: Linux with systemd
@@ -19,16 +19,21 @@
 - The deterministic fixture completes `function_call -> function_call_output -> final answer` on the same simulated turn.
 - HMAC MyToken keys, model policy, client-tool policy, Responses validation, and SSE function-call encoding have automated tests.
 - The worker exposes a fixed internal route allowlist; arbitrary JSON-RPC passthrough is absent and tested.
-- Twenty automated tests pass, including a two-request OpenClaw tool loop through the worker's internal HTTP contract.
+- Twenty-six automated tests pass, including a two-request OpenClaw tool loop through the worker's internal HTTP contract.
+- SQLite/Drizzle schema, idempotent runtime migration, integrity check, persistent API keys, and immediate revocation are implemented.
+- One-time Bootstrap, Argon2id administrator passwords, digest-only server sessions, CSRF, and admin key issuance are implemented.
+- API and worker have separate production entrypoints and communicate through a bounded Unix-socket client.
+- systemd, tmpfiles, systemd credential injection, secret generation, and deployment guidance are present but not live-verified.
 
 ## Not yet verified
 
 - Live ChatGPT device-code login through this implementation.
 - Live dynamic-tool invocation and delayed result continuation.
-- Persistent SQLite stores, administrator authentication, and Unix-socket process split.
 - Production streaming from live app-server rather than buffered fixture output.
 - Linux/systemd hardening.
 - Real OpenClaw E2E.
+- Management web console and browser E2E.
+- Durable response and pending-tool-call recovery across API restarts.
 
 ## Completion rule
 

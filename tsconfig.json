@@ -3,6 +3,8 @@
   "references": [
     { "path": "./packages/contracts" },
     { "path": "./packages/shared" },
+    { "path": "./packages/database" },
+    { "path": "./packages/admin-auth" },
     { "path": "./packages/key-auth" },
     { "path": "./packages/openai-compat" },
     { "path": "./apps/api" },

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13.0"
   },
   "workspaces": [
     "apps/*",
@@ -12,6 +12,8 @@
   ],
   "scripts": {
     "build": "tsc -b",
+    "start:api": "node apps/api/dist/main.js",
+    "start:worker": "node apps/worker/dist/main.js",
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -19,6 +21,9 @@
     "test": "vitest run",
     "test:unit": "vitest run",
     "test:integration": "vitest run --project integration",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/db-migrate.ts",
+    "db:check": "tsx scripts/db-check.ts",
     "codex:generate-schema": "sh scripts/generate-codex-contract.sh",
     "codex:check-contract": "tsx scripts/check-codex-contract.ts",
     "doctor": "tsx scripts/doctor.ts"
@@ -26,6 +31,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@types/node": "^22.19.0",
+    "drizzle-kit": "^1.0.0-beta.10-8a8d9da",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.6.2",

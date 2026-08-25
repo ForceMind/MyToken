@@ -1,0 +1,36 @@
+[Unit]
+Description=MyToken Gateway API
+After=mytoken-worker.service
+Requires=mytoken-worker.service
+
+[Service]
+Type=simple
+User=mytoken-api
+Group=mytoken
+EnvironmentFile=/etc/mytoken/mytoken.env
+LoadCredential=session-secret:/etc/mytoken/secrets/session-secret
+LoadCredential=key-pepper:/etc/mytoken/secrets/key-pepper
+LoadCredential=bootstrap-token:/etc/mytoken/secrets/bootstrap-token
+Environment=MYTOKEN_SESSION_SECRET_FILE=%d/session-secret
+Environment=MYTOKEN_KEY_PEPPER_FILE=%d/key-pepper
+Environment=MYTOKEN_BOOTSTRAP_TOKEN_FILE=%d/bootstrap-token
+ExecStart=/usr/bin/node /opt/mytoken/apps/api/dist/main.js
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
+ReadWritePaths=/var/lib/mytoken/api /run/mytoken
+StateDirectory=mytoken/api
+StateDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target

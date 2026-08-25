@@ -35,7 +35,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["**/test/**/*.ts", "scripts/**/*.ts", "vitest.config.ts"],
+    files: ["**/test/**/*.ts", "scripts/**/*.ts", "vitest.config.ts", "drizzle.config.ts"],
     ...tseslint.configs.disableTypeChecked,
   },
 );

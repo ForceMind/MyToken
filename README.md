@@ -19,11 +19,13 @@ Implemented and verified offline:
 - `/v1/models` and `/v1/responses` contract foundation;
 - OpenClaw function-tool bridge with deterministic two-request fixture coverage;
 - OpenAI Responses SSE text and function-call event encoding.
+- SQLite/Drizzle schema, migrations, integrity checks, and persistent key records.
+- one-time administrator Bootstrap, Argon2id login, server-side Session, and CSRF;
+- separate API/worker startup entrypoints with Unix-socket transport;
+- Linux systemd, tmpfiles, credential, and secret-generation templates.
 
 Not yet complete:
 
-- persistent SQLite stores and administrator authentication;
-- production API/worker Unix-socket process launchers;
 - management console;
 - live Codex login and live dynamic-tool smoke tests;
 - Linux/systemd verification;

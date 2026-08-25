@@ -1,7 +1,9 @@
+import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 
+import type { AdminAuthService } from "@mytoken/admin-auth";
 import { parseMyTokenKey, verifyMyTokenKey, type MyTokenKeyRecord } from "@mytoken/key-auth";
 import {
   createResponseRequestSchema,
@@ -11,6 +13,8 @@ import {
   type ResponseFunctionCallItem,
   type ResponseMessageItem,
 } from "@mytoken/openai-compat";
+
+import { registerAdminRoutes, type ApiKeyManagementStore } from "./admin-routes.js";
 
 export interface GatewayModel {
   id: string;
@@ -35,6 +39,9 @@ export interface CreateApiAppOptions {
   backend: GatewayBackend;
   keyStore: ApiKeyStore;
   keyPepper: Uint8Array;
+  adminAuth?: AdminAuthService;
+  keyManagementStore?: ApiKeyManagementStore;
+  cookieSecure?: boolean;
   logger?: boolean;
 }
 
@@ -60,11 +67,21 @@ export async function createApiApp(options: CreateApiAppOptions): Promise<Fastif
       },
     },
   });
+  await app.register(cookie);
   await app.register(rateLimit, {
     global: false,
     max: 60,
     timeWindow: "1 minute",
   });
+
+  if (options.adminAuth && options.keyManagementStore) {
+    registerAdminRoutes(app, {
+      adminAuth: options.adminAuth,
+      keyStore: options.keyManagementStore,
+      keyPepper: options.keyPepper,
+      cookieSecure: options.cookieSecure ?? true,
+    });
+  }
 
   app.get("/healthz", () => ({ status: "ok" }));
   app.get("/readyz", async (_request, reply) => {

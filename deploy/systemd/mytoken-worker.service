@@ -1,0 +1,34 @@
+[Unit]
+Description=MyToken Codex Worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mytoken-codex
+Group=mytoken
+EnvironmentFile=/etc/mytoken/mytoken.env
+ExecStart=/usr/bin/node /opt/mytoken/apps/worker/dist/main.js
+Restart=on-failure
+RestartSec=5s
+StartLimitIntervalSec=60
+StartLimitBurst=5
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0007
+ReadWritePaths=/var/lib/mytoken/codex /var/lib/mytoken/workspace /run/mytoken
+RuntimeDirectory=mytoken
+RuntimeDirectoryMode=0750
+StateDirectory=mytoken/codex mytoken/workspace
+StateDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target
