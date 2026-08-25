@@ -45,6 +45,14 @@ For moving this branch to a Linux server and continuing development with Codex t
 
 For the one-click installer and terminal command reference, see [Terminal Operations](docs/OPERATIONS.md).
 
+Planned npm preview installation after registry publication:
+
+```bash
+sudo npx --yes mytoken-gateway@preview install
+```
+
+See [npm Release](docs/NPM_RELEASE.md) for the inspected package contents, initial 2FA publication, and GitHub OIDC trusted-publishing workflow.
+
 ## Development
 
 Requirements:

@@ -4,6 +4,16 @@ The one-click installer places `mytokenctl` at `/usr/local/sbin/mytokenctl`. Run
 
 ## Install or upgrade
 
+Fresh server through npm:
+
+```bash
+sudo npx --yes mytoken-gateway@preview install
+```
+
+This is the intended one-command path. Node.js 22.13+ and npm are the only prerequisites that must already exist because npm itself launches the installer. Common Linux tools and the pinned compatible official Codex npm package are installed by the command.
+
+The npm preview clones the immutable Git tag matching the package version.
+
 From the checked-out source branch:
 
 ```bash

@@ -1,5 +1,5 @@
 {
-  "name": "mytoken-gateway",
+  "name": "mytoken-gateway-monorepo",
   "version": "0.1.0",
   "private": true,
   "type": "module",

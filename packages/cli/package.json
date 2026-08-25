@@ -1,0 +1,41 @@
+{
+  "name": "mytoken-gateway",
+  "version": "0.1.0-preview.1",
+  "description": "Installer and operations bootstrap for the self-hosted MyToken Personal Codex Gateway",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "mytoken-gateway": "bin/mytoken-gateway.mjs",
+    "mytoken": "bin/mytoken-gateway.mjs"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepack": "node scripts/prepare-package.mjs",
+    "verify": "node bin/mytoken-gateway.mjs --help"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ForceMind/MyToken.git"
+  },
+  "homepage": "https://github.com/ForceMind/MyToken#readme",
+  "bugs": {
+    "url": "https://github.com/ForceMind/MyToken/issues"
+  },
+  "keywords": [
+    "codex",
+    "openclaw",
+    "openai-compatible",
+    "gateway",
+    "self-hosted"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

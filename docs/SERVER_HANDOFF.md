@@ -34,6 +34,14 @@ git switch codex/feat-mytoken-v0-1
 
 The repository is Apache-2.0 licensed, but confirm the intended GitHub repository visibility before pushing.
 
+An npm-installed preview checks out an immutable release tag. Before continuing development in that checkout, switch to the tracked development branch:
+
+```bash
+cd /srv/mytoken-src
+git fetch origin codex/feat-mytoken-v0-1
+git switch -c codex/feat-mytoken-v0-1 --track origin/codex/feat-mytoken-v0-1
+```
+
 ## 2. Install prerequisites
 
 Required:

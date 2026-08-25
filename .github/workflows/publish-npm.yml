@@ -1,0 +1,51 @@
+name: Publish npm preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      dist_tag:
+        description: npm dist-tag
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - latest
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Use an npm CLI with trusted publishing support
+        run: npm install --global npm@latest
+
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npm run db:check
+
+      - name: Verify immutable release tag
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./packages/cli/package.json').version")"
+          git tag --points-at HEAD | grep -Fx "v${PACKAGE_VERSION}"
+
+      - name: Inspect package contents
+        run: npm pack --dry-run --workspace packages/cli
+
+      - name: Publish
+        run: npm publish --workspace packages/cli --access public --tag "${{ inputs.dist_tag }}"

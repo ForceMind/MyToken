@@ -10,7 +10,9 @@ script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 source_dir="${MYTOKEN_SOURCE_DIR:-$(CDPATH= cd -- "$script_dir/.." && pwd)}"
 install_dir="${MYTOKEN_INSTALL_DIR:-/opt/mytoken}"
 environment_file="${MYTOKEN_ENV_FILE:-/etc/mytoken/mytoken.env}"
-codex_bin="${MYTOKEN_CODEX_BIN:-/usr/local/bin/codex}"
+codex_bin="${MYTOKEN_CODEX_BIN:-}"
+codex_version="${MYTOKEN_CODEX_VERSION:-0.147.0}"
+manage_codex="${MYTOKEN_MANAGE_CODEX:-true}"
 build_user="${SUDO_USER:-root}"
 skip_tests="${MYTOKEN_SKIP_TESTS:-false}"
 
@@ -22,20 +24,35 @@ require_command() {
 }
 
 for command_name in node npm openssl rsync curl systemctl systemd-tmpfiles install runuser \
-  groupadd useradd usermod getent; do
+  groupadd useradd usermod getent sort head sed grep awk mktemp chown chmod cp mv; do
   require_command "$command_name"
 done
-
-if [ ! -x "$codex_bin" ]; then
-  printf '%s\n' "Codex is not executable at $codex_bin" >&2
-  printf '%s\n' "Install Codex first or set MYTOKEN_CODEX_BIN." >&2
-  exit 1
-fi
 
 node_version="$(node --version | sed 's/^v//')"
 minimum_node="22.13.0"
 if [ "$(printf '%s\n%s\n' "$minimum_node" "$node_version" | sort -V | head -n 1)" != "$minimum_node" ]; then
   printf '%s\n' "Node.js $minimum_node or newer is required; found $node_version" >&2
+  exit 1
+fi
+
+if [ -z "$codex_bin" ]; then
+  codex_bin="$(command -v codex || true)"
+fi
+installed_codex_version=""
+if [ -n "$codex_bin" ] && [ -x "$codex_bin" ]; then
+  installed_codex_version="$($codex_bin --version 2>/dev/null | sed -E 's/.* ([0-9]+\.[0-9]+\.[0-9]+)$/\1/' || true)"
+fi
+if [ "$installed_codex_version" != "$codex_version" ]; then
+  if [ "$manage_codex" != "true" ]; then
+    printf '%s\n' "Codex $codex_version is required; found ${installed_codex_version:-none}" >&2
+    exit 1
+  fi
+  printf '%s\n' "Installing compatible Codex CLI $codex_version from the official npm package"
+  npm install --global "@openai/codex@$codex_version"
+  codex_bin="$(command -v codex || true)"
+fi
+if [ -z "$codex_bin" ] || [ ! -x "$codex_bin" ]; then
+  printf '%s\n' "Codex installation completed but the executable is not on PATH" >&2
   exit 1
 fi
 
@@ -105,7 +122,7 @@ MYTOKEN_WORKER_SOCKET=/run/mytoken/worker.sock
 MYTOKEN_CODEX_BIN=$codex_bin
 MYTOKEN_CODEX_HOME=/var/lib/mytoken/codex
 MYTOKEN_CODEX_WORKSPACE=/var/lib/mytoken/workspace
-MYTOKEN_SUPPORTED_CODEX_VERSION=0.147.0
+MYTOKEN_SUPPORTED_CODEX_VERSION=$codex_version
 MYTOKEN_ALLOW_UNVERIFIED_CODEX_VERSION=false
 MYTOKEN_ENABLE_EXPERIMENTAL_TOOL_BRIDGE=true
 MYTOKEN_REQUEST_TIMEOUT_MS=120000
