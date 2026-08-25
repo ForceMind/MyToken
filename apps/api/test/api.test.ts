@@ -152,4 +152,47 @@ describe("public API", () => {
     expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({ error: { code: "invalid_api_key" } });
   });
+
+  it("serves the text-only Chat Completions compatibility endpoint", async () => {
+    const pepper = randomBytes(32);
+    const key = createMyTokenKey(pepper, {
+      mode: "test",
+      name: "AI Chat",
+      allowedModels: ["gpt-allowed"],
+    });
+    const answer = createGatewayResponse({
+      id: "resp_myt_chat",
+      model: "gpt-allowed",
+      output: [
+        {
+          type: "message",
+          id: "msg-chat",
+          role: "assistant",
+          status: "completed",
+          content: [{ type: "output_text", text: "Hello", annotations: [] }],
+        },
+      ],
+    });
+    const app = await createApiApp({
+      backend: backend(answer),
+      keyStore: new MemoryApiKeyStore([key.record]),
+      keyPepper: pepper,
+    });
+    apps.push(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      headers: { authorization: `Bearer ${key.plaintext}` },
+      payload: {
+        model: "gpt-allowed",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      object: "chat.completion",
+      choices: [{ message: { content: "Hello" } }],
+      usage: null,
+    });
+  });
 });

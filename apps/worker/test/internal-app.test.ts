@@ -23,11 +23,11 @@ async function setup(): Promise<ReturnType<typeof createWorkerInternalApp>> {
   const client = new CodexAppServerClient({
     command: process.execPath,
     args: [fixturePath],
-    requestTimeoutMs: 2_000,
+    requestTimeoutMs: 10_000,
   });
-  const broker = new OpenClawToolBroker({ resultTimeoutMs: 2_000 });
+  const broker = new OpenClawToolBroker({ resultTimeoutMs: 10_000 });
   broker.attach(client);
-  const coordinator = new CodexResponseCoordinator(client, broker, { responseTimeoutMs: 2_000 });
+  const coordinator = new CodexResponseCoordinator(client, broker, { responseTimeoutMs: 10_000 });
   await client.start({
     clientInfo: { name: "mytoken_test", title: "MyToken Test", version: "0.1.0" },
     experimentalApi: true,

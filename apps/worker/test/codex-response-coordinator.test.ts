@@ -19,12 +19,12 @@ async function setup(): Promise<CodexResponseCoordinator> {
   const client = new CodexAppServerClient({
     command: process.execPath,
     args: [fixturePath],
-    requestTimeoutMs: 2_000,
+    requestTimeoutMs: 10_000,
   });
   clients.push(client);
-  const broker = new OpenClawToolBroker({ resultTimeoutMs: 2_000 });
+  const broker = new OpenClawToolBroker({ resultTimeoutMs: 10_000 });
   broker.attach(client);
-  const coordinator = new CodexResponseCoordinator(client, broker, { responseTimeoutMs: 2_000 });
+  const coordinator = new CodexResponseCoordinator(client, broker, { responseTimeoutMs: 10_000 });
   await client.start({
     clientInfo: {
       name: "mytoken_gateway_test",

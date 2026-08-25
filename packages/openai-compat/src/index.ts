@@ -64,6 +64,47 @@ export const createResponseRequestSchema = z
 
 export type CreateResponseRequest = z.infer<typeof createResponseRequestSchema>;
 
+export const chatCompletionRequestSchema = z
+  .object({
+    model: z.string().min(1).max(256),
+    messages: z
+      .array(
+        z
+          .object({
+            role: z.enum(["system", "developer", "user", "assistant"]),
+            content: z.string().max(200_000),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(512),
+    stream: z.boolean().optional(),
+    max_completion_tokens: z.number().int().positive().max(128_000).optional(),
+    reasoning_effort: z.string().min(1).max(32).optional(),
+  })
+  .strict();
+
+export type ChatCompletionRequest = z.infer<typeof chatCompletionRequestSchema>;
+
+export function chatCompletionToResponse(request: ChatCompletionRequest): CreateResponseRequest {
+  const response: CreateResponseRequest = {
+    model: request.model,
+    input: request.messages.map((message) => ({
+      type: "message" as const,
+      role: message.role,
+      content: message.content,
+    })),
+    stream: request.stream ?? false,
+  };
+  if (request.max_completion_tokens !== undefined) {
+    response.max_output_tokens = request.max_completion_tokens;
+  }
+  if (request.reasoning_effort !== undefined) {
+    response.reasoning = { effort: request.reasoning_effort };
+  }
+  return response;
+}
+
 export interface ResponseFunctionCallItem {
   type: "function_call";
   id: string;
@@ -131,4 +172,30 @@ export function openAiError(
   param: string | null = null,
 ): { error: { message: string; type: string; param: string | null; code: string } } {
   return { error: { message, type, param, code } };
+}
+
+export function responseToChatCompletion(response: GatewayResponse): Record<string, unknown> {
+  const message = response.output.find(
+    (item): item is ResponseMessageItem => item.type === "message",
+  );
+  return {
+    id: `chatcmpl_myt_${response.id.replace(/^resp_myt_/u, "")}`,
+    object: "chat.completion",
+    created: response.created_at,
+    model: response.model,
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: message ? response.output_text : "" },
+        finish_reason: response.status === "completed" ? "stop" : "length",
+      },
+    ],
+    usage: response.usage
+      ? {
+          prompt_tokens: response.usage.input_tokens,
+          completion_tokens: response.usage.output_tokens,
+          total_tokens: response.usage.total_tokens,
+        }
+      : null,
+  };
 }

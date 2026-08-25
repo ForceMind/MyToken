@@ -16,4 +16,4 @@ MyToken implements a documented subset of OpenAI-compatible APIs. It is not a dr
 | Structured output             | Planned                   | Only after schema contract tests                    |
 | Images/audio/files            | Rejected in V0.1          | No silent downgrade                                 |
 | Built-in web/file/shell tools | Rejected                  | Never exposed through the public API                |
-| `/v1/chat/completions`        | Planned adapter           | Secondary compatibility surface                     |
+| `/v1/chat/completions`        | Supported text subset     | Text messages and SSE; tools are rejected           |

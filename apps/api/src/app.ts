@@ -7,12 +7,15 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import type { AdminAuthService } from "@mytoken/admin-auth";
 import { parseMyTokenKey, verifyMyTokenKey, type MyTokenKeyRecord } from "@mytoken/key-auth";
 import {
+  chatCompletionRequestSchema,
+  chatCompletionToResponse,
   createResponseRequestSchema,
   openAiError,
   type CreateResponseRequest,
   type GatewayResponse,
   type ResponseFunctionCallItem,
   type ResponseMessageItem,
+  responseToChatCompletion,
 } from "@mytoken/openai-compat";
 
 import {
@@ -194,6 +197,42 @@ export async function createApiApp(options: CreateApiAppOptions): Promise<Fastif
     return reply.send(response);
   });
 
+  app.post("/v1/chat/completions", async (request, reply) => {
+    const authenticated = await authenticate(request, reply, options);
+    if (!authenticated) return;
+    if (!options.backend.isReady()) {
+      return sendError(reply, 503, "Gateway is not ready", "gateway_not_ready", "api_error");
+    }
+    const parsed = chatCompletionRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(
+        reply,
+        400,
+        "Request does not match the text-only Chat Completions subset",
+        "unsupported_chat_completion_request",
+      );
+    }
+    if (
+      authenticated.record.allowedModels.length > 0 &&
+      !authenticated.record.allowedModels.includes(parsed.data.model)
+    ) {
+      return sendError(reply, 403, "Model is not allowed for this key", "model_not_allowed");
+    }
+    const response = await options.backend.createResponse(chatCompletionToResponse(parsed.data), {
+      apiKeyId: authenticated.record.id,
+    });
+    const completion = responseToChatCompletion(response);
+    reply.header("Cache-Control", "no-store");
+    reply.header("X-Request-Id", request.id);
+    if (parsed.data.stream === true) {
+      reply.header("Content-Type", "text/event-stream; charset=utf-8");
+      reply.header("Cache-Control", "no-cache, no-transform");
+      reply.header("X-Accel-Buffering", "no");
+      return reply.send(encodeChatCompletionSse(completion));
+    }
+    return reply.send(completion);
+  });
+
   if (options.staticRoot) {
     app.setNotFoundHandler((request, reply) => {
       if (
@@ -254,6 +293,31 @@ export function encodeResponseSse(response: GatewayResponse): string {
   });
   events.push({ type: "response.completed", response });
   return `${events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n`).join("\n")}\n`;
+}
+
+export function encodeChatCompletionSse(completion: Record<string, unknown>): string {
+  const choices = Array.isArray(completion.choices) ? completion.choices : [];
+  const first = isRecord(choices[0]) ? choices[0] : {};
+  const message = isRecord(first.message) ? first.message : {};
+  const id = typeof completion.id === "string" ? completion.id : "chatcmpl_myt_unknown";
+  const model = typeof completion.model === "string" ? completion.model : "unknown";
+  const created = typeof completion.created === "number" ? completion.created : 0;
+  const base = { id, object: "chat.completion.chunk", created, model };
+  const events = [
+    { ...base, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] },
+    {
+      ...base,
+      choices: [
+        {
+          index: 0,
+          delta: { content: typeof message.content === "string" ? message.content : "" },
+          finish_reason: null,
+        },
+      ],
+    },
+    { ...base, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
+  ];
+  return `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`;
 }
 
 function appendMessageEvents(

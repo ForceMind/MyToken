@@ -17,6 +17,7 @@ Implemented and verified offline:
 - fixed worker-internal route allowlist;
 - HMAC MyToken key creation, parsing, expiry, and revocation;
 - `/v1/models` and `/v1/responses` contract foundation;
+- text-only `/v1/chat/completions` compatibility for ordinary AI chat clients;
 - OpenClaw function-tool bridge with deterministic two-request fixture coverage;
 - OpenAI Responses SSE text and function-call event encoding.
 - SQLite/Drizzle schema, migrations, integrity checks, and persistent key records.

@@ -19,12 +19,13 @@
 - The deterministic fixture completes `function_call -> function_call_output -> final answer` on the same simulated turn.
 - HMAC MyToken keys, model policy, client-tool policy, Responses validation, and SSE function-call encoding have automated tests.
 - The worker exposes a fixed internal route allowlist; arbitrary JSON-RPC passthrough is absent and tested.
-- Twenty-six automated tests pass, including a two-request OpenClaw tool loop through the worker's internal HTTP contract.
+- Twenty-eight automated tests pass, including a two-request OpenClaw tool loop through the worker's internal HTTP contract.
 - SQLite/Drizzle schema, idempotent runtime migration, integrity check, persistent API keys, and immediate revocation are implemented.
 - One-time Bootstrap, Argon2id administrator passwords, digest-only server sessions, CSRF, and admin key issuance are implemented.
 - API and worker have separate production entrypoints and communicate through a bounded Unix-socket client.
 - systemd, tmpfiles, systemd credential injection, secret generation, and deployment guidance are present but not live-verified.
 - React/Vite/Tailwind management console implements setup, login, overview, Codex status/device login, Key management, and system status.
+- A text-only `/v1/chat/completions` adapter supports ordinary AI chat clients; structured tools remain on the canonical Responses path.
 - The built console was exercised through the real Fastify static server in the in-app browser with no browser console errors; automated Playwright coverage remains pending.
 
 ## Not yet verified
