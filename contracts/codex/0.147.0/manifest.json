@@ -1,0 +1,24 @@
+{
+  "codexVersion": "0.147.0",
+  "generatedAt": "2026-08-25T08:18:21.831Z",
+  "stableApiOnly": false,
+  "experimentalUsage": [
+    "thread/start.dynamicTools",
+    "item/tool/call"
+  ],
+  "schemaSha256": "5a8d69e6e19dd1919686d2be8f85b52f5780fb44933a4e7fab26a72dbf536249",
+  "fileCount": 2011,
+  "methods": {
+    "account/read": "schema-verified",
+    "account/login/start": "schema-verified",
+    "account/rateLimits/read": "schema-verified",
+    "model/list": "schema-verified",
+    "thread/start": "schema-verified",
+    "thread/resume": "schema-verified",
+    "turn/start": "schema-verified",
+    "turn/interrupt": "schema-verified",
+    "thread/delete": "schema-verified",
+    "thread/start.dynamicTools": "schema-verified",
+    "item/tool/call": "schema-verified"
+  }
+}

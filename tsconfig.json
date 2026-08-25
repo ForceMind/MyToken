@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/contracts" },
+    { "path": "./packages/shared" },
+    { "path": "./packages/key-auth" },
+    { "path": "./packages/openai-compat" },
+    { "path": "./apps/api" },
+    { "path": "./apps/worker" }
+  ]
+}
