@@ -1,4 +1,4 @@
-import type { MyTokenKeyRecord } from "@mytoken/key-auth";
+import type { MyTokenKeyRecord, UpdateMyTokenKeyPolicy } from "@mytoken/key-auth";
 
 import type { ApiKeyStore } from "./app.js";
 import type { ApiKeyManagementStore } from "./admin-routes.js";
@@ -27,6 +27,18 @@ export class MemoryApiKeyStore implements ApiKeyStore, ApiKeyManagementStore {
     if (!record) return false;
     this.#records.set(keyId, { ...record, revokedAt: record.revokedAt ?? now });
     return true;
+  }
+
+  touchLastUsed(keyId: string, now = Date.now()): void {
+    const record = this.#records.get(keyId);
+    if (record) this.#records.set(keyId, { ...record, lastUsedAt: now });
+  }
+
+  updatePolicy(keyId: string, patch: UpdateMyTokenKeyPolicy): Promise<boolean> {
+    const record = this.#records.get(keyId);
+    if (!record) return Promise.resolve(false);
+    this.#records.set(keyId, { ...record, ...patch });
+    return Promise.resolve(true);
   }
 
   list(): Promise<readonly MyTokenKeyRecord[]> {

@@ -27,7 +27,10 @@ async function setup(): Promise<ReturnType<typeof createWorkerInternalApp>> {
   });
   const broker = new OpenClawToolBroker({ resultTimeoutMs: 10_000 });
   broker.attach(client);
-  const coordinator = new CodexResponseCoordinator(client, broker, { responseTimeoutMs: 10_000 });
+  const coordinator = new CodexResponseCoordinator(client, broker, {
+    responseTimeoutMs: 10_000,
+    enableClientTools: true,
+  });
   await client.start({
     clientInfo: { name: "mytoken_test", title: "MyToken Test", version: "0.1.0" },
     experimentalApi: true,
@@ -81,5 +84,25 @@ describe("worker internal API", () => {
     });
     expect(second.statusCode).toBe(200);
     expect(second.json()).toMatchObject({ output_text: "Weather is 25 C" });
+  });
+
+  it("streams real app-server deltas as bounded NDJSON events", async () => {
+    const app = await setup();
+    const response = await app.inject({
+      method: "POST",
+      url: "/internal/responses/stream",
+      payload: { apiKeyId: "key-stream", request: { model: "gpt-fixture", input: "Hello" } },
+    });
+    expect(response.statusCode).toBe(200);
+    const events = response.body
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(events.map((event) => event.type)).toEqual([
+      "response.created",
+      "text.delta",
+      "response.completed",
+    ]);
+    expect(events[1]).toMatchObject({ delta: "Fixture answer" });
   });
 });

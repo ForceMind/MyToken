@@ -10,7 +10,7 @@ const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.me
 const version = packageJson.version;
 const defaults = {
   repository: "https://github.com/ForceMind/MyToken.git",
-  ref: "v0.1.0-preview.1",
+  ref: `v${version}`,
   source: "/srv/mytoken-src",
 };
 
@@ -40,6 +40,9 @@ try {
     case "ready":
     case "backup":
     case "codex-status":
+    case "codex-login":
+    case "provider-status":
+    case "provider-reload":
       delegate(command);
       break;
     case "handoff":
@@ -105,6 +108,12 @@ function installPrerequisites() {
     "sed",
     "grep",
     "awk",
+    "flock",
+    "timeout",
+    "tail",
+    "cut",
+    "wc",
+    "stty",
   ];
   const missing = required.filter((name) => !commandExists(name));
   if (missing.length === 0) return;
@@ -153,10 +162,12 @@ async function ensureSource(optionsValue) {
       throw new Error(`Source directory exists but is not a Git checkout: ${optionsValue.source}`);
     }
     console.log(`Using existing source checkout: ${optionsValue.source}`);
+    verifyDefaultRelease(optionsValue);
     return;
   }
   await mkdir(path.dirname(optionsValue.source), { recursive: true });
   run("git", ["clone", "--branch", optionsValue.ref, optionsValue.repository, optionsValue.source]);
+  verifyDefaultRelease(optionsValue);
   restoreSudoOwnership(optionsValue.source);
 }
 
@@ -170,6 +181,23 @@ async function updateSource(optionsValue) {
   }
   run("git", ["-C", optionsValue.source, "fetch", "--tags", "origin", optionsValue.ref]);
   run("git", ["-C", optionsValue.source, "checkout", "--detach", "FETCH_HEAD"]);
+  verifyDefaultRelease(optionsValue);
+}
+
+function verifyDefaultRelease(optionsValue) {
+  if (optionsValue.ref !== defaults.ref || optionsValue.repository !== defaults.repository) return;
+  const origin = capture("git", ["-C", optionsValue.source, "remote", "get-url", "origin"]).trim();
+  if (origin !== defaults.repository) {
+    throw new Error(`Source origin mismatch: expected ${defaults.repository}`);
+  }
+  const expectedCommit = capture("npm", ["view", `mytoken-gateway@${version}`, "gitHead"]).trim();
+  if (!/^[a-f0-9]{40}$/u.test(expectedCommit)) {
+    throw new Error(`npm release metadata has no valid gitHead for ${version}`);
+  }
+  const commit = capture("git", ["-C", optionsValue.source, "rev-parse", "HEAD"]).trim();
+  if (commit !== expectedCommit) {
+    throw new Error(`Release commit mismatch: expected ${expectedCommit}, found ${commit}`);
+  }
 }
 
 function runInstaller(optionsValue) {
@@ -232,7 +260,8 @@ function usage() {
 Usage:
   mytoken-gateway install [--source DIR] [--ref GIT_REF] [--repo URL]
   mytoken-gateway update  [--source DIR] [--ref GIT_REF] [--repo URL]
-  mytoken-gateway status|doctor|health|ready|backup|codex-status
+  mytoken-gateway status|doctor|health|ready|backup|codex-status|codex-login
+  mytoken-gateway provider-status|provider-reload
   mytoken-gateway handoff [--source DIR]
   mytoken-gateway version
 

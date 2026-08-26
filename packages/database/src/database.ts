@@ -27,9 +27,12 @@ CREATE TABLE IF NOT EXISTS __mytoken_migrations (
       "INSERT INTO __mytoken_migrations (id, applied_at) VALUES (?, ?)",
     );
     for (const migration of migrations) {
-      if (applied.get(migration.id)) continue;
       this.sqlite.exec("BEGIN IMMEDIATE");
       try {
+        if (applied.get(migration.id)) {
+          this.sqlite.exec("COMMIT");
+          continue;
+        }
         this.sqlite.exec(migration.sql);
         record.run(migration.id, Date.now());
         this.sqlite.exec("COMMIT");

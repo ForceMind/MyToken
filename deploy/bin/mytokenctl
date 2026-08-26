@@ -32,6 +32,10 @@ Commands:
   health                  Query /healthz
   ready                   Query /readyz
   codex-status            Show Codex authentication method (never tokens)
+  codex-login             Log in the dedicated server Codex identity in this terminal
+  provider-status         Show provider configuration without revealing keys
+  provider-set ID [FILE]  Store or replace a provider API key, then restart API
+  provider-reload         Restart API to reload provider configuration
   permissions             Show important ownership and modes
   doctor                  Show non-sensitive runtime versions and paths
   db-check                Run SQLite integrity_check
@@ -77,6 +81,93 @@ case "$command_name" in
       PATH=/usr/local/bin:/usr/bin:/bin \
       "$codex_bin" login status
     ;;
+  codex-login)
+    codex_bin="$(env_value MYTOKEN_CODEX_BIN)"
+    codex_home="$(env_value MYTOKEN_CODEX_HOME)"
+    as_root systemctl stop mytoken-worker.service mytoken-api.service || true
+    set +e
+    as_root runuser -u mytoken-codex -- env \
+      HOME="$codex_home" CODEX_HOME="$codex_home" \
+      PATH=/usr/local/bin:/usr/bin:/bin \
+      "$codex_bin" login --device-auth
+    login_status=$?
+    set -e
+    as_root systemctl start mytoken-worker.service mytoken-api.service
+    exit "$login_status"
+    ;;
+  provider-status)
+    provider_config="$(env_value MYTOKEN_PROVIDERS_FILE)"
+    as_root env MYTOKEN_PROVIDERS_FILE="$provider_config" /usr/bin/env node -e '
+      const fs = require("node:fs");
+      const config = JSON.parse(fs.readFileSync(process.env.MYTOKEN_PROVIDERS_FILE, "utf8"));
+      for (const provider of config.providers || []) {
+        let configured = false;
+        try { configured = fs.readFileSync(provider.apiKeyFile, "utf8").trim().length >= 8; }
+        catch {}
+        console.log(JSON.stringify({
+          id: provider.id,
+          name: provider.name,
+          protocol: provider.protocol,
+          enabled: provider.enabled !== false,
+          configured
+        }));
+      }
+    '
+    ;;
+  provider-set)
+    provider_id="${2:-}"
+    provider_source="${3:-}"
+    case "$provider_id" in
+      ""|*[!a-z0-9_-]*) printf '%s\n' "Provider ID is required and must be lowercase." >&2; exit 2 ;;
+    esac
+    provider_config="$(env_value MYTOKEN_PROVIDERS_FILE)"
+    secret_path="$(as_root env MYTOKEN_PROVIDERS_FILE="$provider_config" PROVIDER_ID="$provider_id" \
+      /usr/bin/env node -e '
+        const fs = require("node:fs");
+        const config = JSON.parse(fs.readFileSync(process.env.MYTOKEN_PROVIDERS_FILE, "utf8"));
+        const provider = (config.providers || []).find((entry) => entry.id === process.env.PROVIDER_ID);
+        if (!provider || typeof provider.apiKeyFile !== "string") process.exit(2);
+        process.stdout.write(provider.apiKeyFile);
+      ')" || {
+        printf '%s\n' "Provider is not declared in $provider_config: $provider_id" >&2
+        exit 2
+    }
+    secret_tmp="$(mktemp /var/tmp/mytoken-provider-key.XXXXXX)"
+    provider_terminal_hidden=false
+    cleanup_provider_key() {
+      if [ "$provider_terminal_hidden" = "true" ]; then stty echo; fi
+      rm -f -- "$secret_tmp"
+    }
+    trap cleanup_provider_key EXIT HUP INT TERM
+    if [ -n "$provider_source" ]; then
+      if [ ! -r "$provider_source" ]; then
+        printf '%s\n' "Provider key file is not readable: $provider_source" >&2
+        exit 1
+      fi
+      cp "$provider_source" "$secret_tmp"
+    else
+      printf 'Enter API key for %s: ' "$provider_id" >&2
+      if [ -t 0 ]; then stty -echo; provider_terminal_hidden=true; fi
+      IFS= read -r provider_key
+      if [ "$provider_terminal_hidden" = "true" ]; then
+        stty echo
+        provider_terminal_hidden=false
+        printf '\n' >&2
+      fi
+      printf '%s' "$provider_key" > "$secret_tmp"
+      unset provider_key
+    fi
+    if [ "$(wc -c < "$secret_tmp")" -lt 8 ]; then
+      printf '%s\n' "Provider API key is too short" >&2
+      exit 1
+    fi
+    as_root install -o mytoken-api -g mytoken-api -m 0600 "$secret_tmp" "$secret_path"
+    as_root systemctl restart mytoken-api.service
+    printf '%s\n' "Provider key stored and API reloaded: $provider_id"
+    ;;
+  provider-reload)
+    as_root systemctl restart mytoken-api.service
+    ;;
   permissions)
     as_root stat -c '%A %U:%G %n' \
       /etc/mytoken /etc/mytoken/secrets \
@@ -118,15 +209,52 @@ case "$command_name" in
     backup_dir="$(dirname -- "$database_path")/backups"
     as_root install -d -o mytoken-api -g mytoken-api -m 0700 "$backup_dir"
     backup_path="$backup_dir/manual-$(date -u +%Y%m%dT%H%M%SZ).sqlite"
+    if ! as_root runuser -u mytoken-api -- env MYTOKEN_DB_PATH="$database_path" \
+      /usr/bin/env node -e '
+        const { DatabaseSync } = require("node:sqlite");
+        const db = new DatabaseSync(process.env.MYTOKEN_DB_PATH);
+        db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+        const row = db.prepare("PRAGMA integrity_check").get();
+        db.close();
+        if (row.integrity_check !== "ok") process.exit(1);
+      '; then
+      if [ "$api_active" = "true" ]; then as_root systemctl start mytoken-api.service; fi
+      printf '%s\n' "Database checkpoint or integrity check failed" >&2
+      exit 1
+    fi
     if ! as_root cp --preserve=mode,ownership,timestamps "$database_path" "$backup_path"; then
       if [ "$api_active" = "true" ]; then as_root systemctl start mytoken-api.service; fi
       printf '%s\n' "Database backup failed" >&2
+      exit 1
+    fi
+    if ! as_root runuser -u mytoken-api -- env MYTOKEN_DB_PATH="$backup_path" \
+      /usr/bin/env node -e '
+        const { DatabaseSync } = require("node:sqlite");
+        const db = new DatabaseSync(process.env.MYTOKEN_DB_PATH, { readOnly: true });
+        const row = db.prepare("PRAGMA integrity_check").get();
+        db.close();
+        if (row.integrity_check !== "ok") process.exit(1);
+      '; then
+      if [ "$api_active" = "true" ]; then as_root systemctl start mytoken-api.service; fi
+      printf '%s\n' "Backup integrity check failed: $backup_path" >&2
       exit 1
     fi
     if [ "$api_active" = "true" ]; then as_root systemctl start mytoken-api.service; fi
     printf '%s\n' "$backup_path"
     ;;
   bootstrap-token)
+    database_path="$(env_value MYTOKEN_DB_PATH)"
+    if [ -f "$database_path" ] && as_root runuser -u mytoken-api -- env MYTOKEN_DB_PATH="$database_path" \
+      /usr/bin/env node -e '
+        const { DatabaseSync } = require("node:sqlite");
+        const db = new DatabaseSync(process.env.MYTOKEN_DB_PATH, { readOnly: true });
+        const initialized = Boolean(db.prepare("SELECT 1 FROM admin_users LIMIT 1").get());
+        db.close();
+        process.exit(initialized ? 0 : 1);
+      '; then
+      printf '%s\n' "Administrator is already initialized; the bootstrap token is no longer usable." >&2
+      exit 1
+    fi
     printf '%s\n' "Sensitive: this token is displayed only in your current terminal." >&2
     as_root cat /etc/mytoken/secrets/bootstrap-token
     printf '\n'

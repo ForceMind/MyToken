@@ -104,6 +104,66 @@ describe("public API", () => {
     expect(response.body).toContain("response.completed");
   });
 
+  it("maps real backend deltas to ordered Responses SSE events", async () => {
+    const pepper = randomBytes(32);
+    const key = createMyTokenKey(pepper, {
+      mode: "test",
+      name: "Streaming",
+      allowedModels: ["gpt-allowed"],
+    });
+    const final = createGatewayResponse({
+      id: "resp-stream",
+      model: "gpt-allowed",
+      output: [
+        {
+          type: "message",
+          id: "msg-stream",
+          role: "assistant",
+          status: "completed",
+          content: [{ type: "output_text", text: "Hello", annotations: [] }],
+        },
+      ],
+    });
+    const streaming: GatewayBackend = {
+      ...backend(final),
+      createResponseStream: async (_request, _context, emit) => {
+        await emit({
+          type: "response.created",
+          response: {
+            id: final.id,
+            object: "response",
+            created_at: final.created_at,
+            model: final.model,
+          },
+          itemId: "msg-stream",
+        });
+        await emit({ type: "text.delta", delta: "Hel" });
+        await emit({ type: "text.delta", delta: "lo" });
+        await emit({ type: "response.completed", response: final });
+      },
+    };
+    const app = await createApiApp({
+      backend: streaming,
+      keyStore: new MemoryApiKeyStore([key.record]),
+      keyPepper: pepper,
+    });
+    apps.push(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/responses",
+      headers: { authorization: `Bearer ${key.plaintext}` },
+      payload: { model: "gpt-allowed", input: "Hello", stream: true },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body.match(/response\.output_text\.delta/gu)).toHaveLength(4);
+    expect(response.body).toContain('"item_id":"msg-stream"');
+    expect(response.body.indexOf('"delta":"Hel"')).toBeLessThan(
+      response.body.indexOf('"delta":"lo"'),
+    );
+    expect(response.body).toContain("response.output_text.done");
+    expect(response.body).toContain("response.completed");
+  });
+
   it("rejects client tools when the key policy disables them", async () => {
     const pepper = randomBytes(32);
     const key = createMyTokenKey(pepper, {

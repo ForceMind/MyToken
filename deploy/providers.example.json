@@ -1,0 +1,20 @@
+{
+  "providers": [
+    {
+      "id": "anthropic",
+      "name": "Claude",
+      "protocol": "anthropic",
+      "baseUrl": "https://api.anthropic.com",
+      "apiKeyFile": "/etc/mytoken/provider-secrets/anthropic",
+      "enabled": true
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "protocol": "openai-responses",
+      "baseUrl": "https://api.deepseek.com",
+      "apiKeyFile": "/etc/mytoken/provider-secrets/deepseek",
+      "enabled": true
+    }
+  ]
+}

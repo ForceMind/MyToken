@@ -6,12 +6,12 @@ MyToken implements a documented subset of OpenAI-compatible APIs. It is not a dr
 | ----------------------------- | ------------------------- | --------------------------------------------------- |
 | `GET /v1/models`              | Supported                 | Dynamic server Codex catalog filtered by key policy |
 | `POST /v1/responses` text     | Supported                 | Canonical API                                       |
-| Responses SSE                 | Supported                 | Bounded streaming and cancellation                  |
+| Responses SSE                 | Supported                 | Live Codex deltas; bounded external fallback        |
 | Function tools                | Supported                 | Client-defined tools executed by the client         |
 | Tool choice                   | Supported subset          | Function tools only                                 |
 | Parallel tool calls           | Supported after gate      | Bounded and ownership checked                       |
-| Previous response             | Supported                 | Bound to the creating key                           |
-| Store                         | Supported subset          | Default false; retention is explicit                |
+| Previous response             | Process-local preview     | Bound to the creating key; restart invalidates it   |
+| Store                         | Gateway log only          | Codex threads are always ephemeral                  |
 | Reasoning effort              | Supported when advertised | Validated against model metadata                    |
 | Structured output             | Planned                   | Only after schema contract tests                    |
 | Images/audio/files            | Rejected in V0.1          | No silent downgrade                                 |

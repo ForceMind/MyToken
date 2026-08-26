@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 
-import type { MyTokenKeyRecord } from "@mytoken/key-auth";
+import type { MyTokenKeyRecord, UpdateMyTokenKeyPolicy } from "@mytoken/key-auth";
 import { MyTokenError } from "@mytoken/shared";
 
 import type { MyTokenDatabase } from "./database.js";
@@ -27,6 +27,9 @@ export class ApiKeyRepository {
         rpmLimit: record.rpmLimit,
         dailyRequestLimit: record.dailyRequestLimit,
         maxConcurrency: record.maxConcurrency,
+        ipAllowlistJson: JSON.stringify(record.ipAllowlist),
+        requestBudget: record.requestBudget,
+        tokenBudget: record.tokenBudget,
       })
       .run();
   }
@@ -34,10 +37,13 @@ export class ApiKeyRepository {
   getById(keyId: string): Promise<MyTokenKeyRecord | undefined> {
     const row = this.database.db.select().from(apiKeys).where(eq(apiKeys.id, keyId)).get();
     if (!row) return Promise.resolve(undefined);
+    if (row.mode !== "live" && row.mode !== "test") {
+      throw new MyTokenError("invalid_database_key_mode", "Invalid API Key mode in database");
+    }
     const allowedModels = parseStringArray(row.allowedModelsJson);
     return Promise.resolve({
       id: row.id,
-      mode: row.mode === "test" ? "test" : "live",
+      mode: row.mode,
       name: row.name,
       prefix: row.prefix,
       secretDigest: row.secretDigest,
@@ -50,7 +56,36 @@ export class ApiKeyRepository {
       rpmLimit: row.rpmLimit,
       dailyRequestLimit: row.dailyRequestLimit,
       maxConcurrency: row.maxConcurrency,
+      ipAllowlist: parseStringArray(row.ipAllowlistJson),
+      requestBudget: row.requestBudget,
+      tokenBudget: row.tokenBudget,
     });
+  }
+
+  touchLastUsed(keyId: string, now = Date.now()): void {
+    this.database.db.update(apiKeys).set({ lastUsedAt: now }).where(eq(apiKeys.id, keyId)).run();
+  }
+
+  async updatePolicy(keyId: string, patch: UpdateMyTokenKeyPolicy): Promise<boolean> {
+    const current = await this.getById(keyId);
+    if (!current) return false;
+    const next = { ...current, ...patch };
+    const result = this.database.db
+      .update(apiKeys)
+      .set({
+        expiresAt: next.expiresAt,
+        allowedModelsJson: JSON.stringify(next.allowedModels),
+        allowClientTools: next.allowClientTools ? 1 : 0,
+        rpmLimit: next.rpmLimit,
+        dailyRequestLimit: next.dailyRequestLimit,
+        maxConcurrency: next.maxConcurrency,
+        ipAllowlistJson: JSON.stringify(next.ipAllowlist),
+        requestBudget: next.requestBudget,
+        tokenBudget: next.tokenBudget,
+      })
+      .where(eq(apiKeys.id, keyId))
+      .run();
+    return result.changes > 0;
   }
 
   revoke(keyId: string, now = Date.now()): boolean {

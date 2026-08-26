@@ -21,6 +21,17 @@ Admin Browser / OpenClaw / AI Client
        Codex-managed ChatGPT account
 ```
 
+`mytoken-api` also owns optional external model providers. Anthropic, DeepSeek, and generic OpenAI Responses credentials stay in API-only secret files and never cross into `mytoken-worker`:
+
+```text
+                        +--> mytoken-worker --> codex app-server
+public Responses --> API router
+                        +--> Anthropic Messages API
+                        +--> DeepSeek / other Responses API
+```
+
+External model ids are canonical `provider/model` strings. Existing bare model ids remain a Codex compatibility alias.
+
 ## Dependency direction
 
 - Shared packages contain data-only contracts and pure utilities.

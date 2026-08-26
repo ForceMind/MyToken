@@ -19,6 +19,9 @@ export interface MyTokenKeyRecord {
   rpmLimit: number;
   dailyRequestLimit: number;
   maxConcurrency: number;
+  ipAllowlist: readonly string[];
+  requestBudget: number | null;
+  tokenBudget: number | null;
 }
 
 export interface CreateMyTokenKeyOptions {
@@ -31,12 +34,30 @@ export interface CreateMyTokenKeyOptions {
   rpmLimit?: number;
   dailyRequestLimit?: number;
   maxConcurrency?: number;
+  ipAllowlist?: readonly string[];
+  requestBudget?: number | null;
+  tokenBudget?: number | null;
 }
 
 export interface CreatedMyTokenKey {
   plaintext: string;
   record: MyTokenKeyRecord;
 }
+
+export type UpdateMyTokenKeyPolicy = Partial<
+  Pick<
+    MyTokenKeyRecord,
+    | "allowedModels"
+    | "allowClientTools"
+    | "rpmLimit"
+    | "dailyRequestLimit"
+    | "maxConcurrency"
+    | "ipAllowlist"
+    | "requestBudget"
+    | "tokenBudget"
+    | "expiresAt"
+  >
+>;
 
 export interface ParsedMyTokenKey {
   mode: KeyMode;
@@ -74,6 +95,9 @@ export function createMyTokenKey(
       rpmLimit: options.rpmLimit ?? 10,
       dailyRequestLimit: options.dailyRequestLimit ?? 100,
       maxConcurrency: options.maxConcurrency ?? 1,
+      ipAllowlist: options.ipAllowlist ?? [],
+      requestBudget: options.requestBudget ?? null,
+      tokenBudget: options.tokenBudget ?? null,
     },
   };
 }

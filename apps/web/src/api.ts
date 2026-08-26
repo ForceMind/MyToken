@@ -20,6 +20,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { ...init, headers, credentials: "same-origin" });
   const body = response.status === 204 ? undefined : ((await response.json()) as unknown);
   if (!response.ok) {
+    if (response.status === 401) sessionStorage.removeItem(csrfStorageKey);
     const error = isRecord(body) && isRecord(body.error) ? body.error : undefined;
     throw new ApiError(
       response.status,
@@ -52,11 +53,22 @@ export const api = {
     sessionStorage.removeItem(csrfStorageKey);
   },
   keys: () => request<{ data: ApiKeySummary[] }>("/api/admin/keys"),
+  models: () => request<{ data: GatewayModel[] }>("/api/admin/models"),
+  providers: () => request<{ data: GatewayProviderStatus[] }>("/api/admin/providers"),
+  requests: (keyId?: string) =>
+    request<{ data: GatewayRequestLog[] }>(
+      `/api/admin/requests?limit=100${keyId ? `&keyId=${encodeURIComponent(keyId)}` : ""}`,
+    ),
   createKey: (input: CreateKeyInput) =>
     request<CreatedKey>("/api/admin/keys", { method: "POST", body: JSON.stringify(input) }),
   revokeKey: (keyId: string) =>
     request<{ revoked: boolean }>(`/api/admin/keys/${encodeURIComponent(keyId)}/revoke`, {
       method: "POST",
+    }),
+  updateKey: (keyId: string, input: Partial<CreateKeyInput>) =>
+    request<{ updated: boolean }>(`/api/admin/keys/${encodeURIComponent(keyId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
     }),
   codex: () => request<CodexStatus>("/api/admin/codex"),
   startCodexLogin: () => request<DeviceLogin>("/api/admin/codex/login", { method: "POST" }),
@@ -68,6 +80,42 @@ export const api = {
   logoutCodex: () => request<unknown>("/api/admin/codex/logout", { method: "POST" }),
   health: () => request<{ status: string }>("/healthz"),
   ready: () => request<{ status: string }>("/readyz"),
+  systemUpdate: () => request<SystemUpdateInfo>("/api/admin/system/update"),
+  startSystemUpdate: () =>
+    request<{ requested: { id: string; requestedAt: string } }>("/api/admin/system/update", {
+      method: "POST",
+    }),
+  testResponse: async (input: {
+    key: string;
+    model: string;
+    instructions?: string;
+    input: string;
+  }) => {
+    const response = await fetch("/v1/responses", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${input.key}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: input.model,
+        input: input.input,
+        ...(input.instructions ? { instructions: input.instructions } : {}),
+        stream: false,
+        store: false,
+      }),
+    });
+    const body = (await response.json()) as unknown;
+    if (!response.ok) {
+      const error = isRecord(body) && isRecord(body.error) ? body.error : undefined;
+      throw new ApiError(
+        response.status,
+        error && typeof error.message === "string" ? error.message : "Request failed",
+        error && typeof error.code === "string" ? error.code : undefined,
+      );
+    }
+    return body as GatewayResponse;
+  },
 };
 
 export interface ApiKeySummary {
@@ -83,6 +131,13 @@ export interface ApiKeySummary {
   rpmLimit: number;
   dailyRequestLimit: number;
   maxConcurrency: number;
+  ipAllowlist: string[];
+  requestBudget: number | null;
+  tokenBudget: number | null;
+  requestBalance: number | null;
+  tokenBalance: number | null;
+  activeRequests: number;
+  usage: KeyUsage;
 }
 
 export interface CreateKeyInput {
@@ -93,6 +148,9 @@ export interface CreateKeyInput {
   rpmLimit: number;
   dailyRequestLimit: number;
   maxConcurrency: number;
+  ipAllowlist: string[];
+  requestBudget: number | null;
+  tokenBudget: number | null;
 }
 
 export interface CreatedKey extends ApiKeySummary {
@@ -112,13 +170,122 @@ export interface CodexStatus {
     primary: RateWindow | null;
     secondary: RateWindow | null;
     observedAt: number;
+    byLimitId: Record<string, RateLimitBucket | null>;
+    resetCredits: { availableCount: number | null } | null;
+  };
+  usage: {
+    available: boolean;
+    summary: {
+      lifetimeTokens: number | null;
+      peakDailyTokens: number | null;
+      longestRunningTurnSec: number | null;
+      currentStreakDays: number | null;
+      longestStreakDays: number | null;
+    } | null;
+    dailyUsageBuckets: Array<{ startDate: string; tokens: number }> | null;
+    observedAt: number;
   };
 }
 
-interface RateWindow {
+export interface RateWindow {
   usedPercent: number | null;
   windowDurationMins: number | null;
   resetsAt: number | null;
+}
+
+export interface RateLimitBucket {
+  limitId: string | null;
+  limitName: string | null;
+  planType: string | null;
+  credits: number | null;
+  rateLimitReachedType: string | null;
+  primary: RateWindow | null;
+  secondary: RateWindow | null;
+}
+
+export interface GatewayModel {
+  id: string;
+  displayName: string;
+  providerId?: string;
+  providerName?: string;
+  upstreamModel?: string;
+  supportsTools?: boolean;
+  supportsStreaming?: boolean;
+}
+
+export interface GatewayProviderStatus {
+  id: string;
+  name: string;
+  protocol: string;
+  enabled: boolean;
+  ready: boolean;
+  modelsCount: number;
+  error: string | null;
+}
+
+export interface KeyUsage {
+  totalRequests: number;
+  billableRequests: number;
+  todayRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  lastRequestAt: number | null;
+}
+
+export interface GatewayRequestLog {
+  id: string;
+  requestId: string;
+  apiKeyId: string;
+  keyName: string;
+  method: string;
+  path: string;
+  model: string | null;
+  providerId: string;
+  upstreamModel: string | null;
+  billable: boolean;
+  statusCode: number | null;
+  status: "in_progress" | "completed" | "failed";
+  startedAt: number;
+  completedAt: number | null;
+  latencyMs: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  errorCode: string | null;
+  sourceIp: string;
+  userAgent: string | null;
+  requestBody: unknown;
+  responseBody: unknown;
+}
+
+export interface GatewayResponse {
+  id: string;
+  status: "completed" | "failed" | "incomplete";
+  model: string;
+  output_text: string;
+  usage: { input_tokens: number; output_tokens: number; total_tokens: number } | null;
+  error: { message: string; code: string } | null;
+}
+
+export interface SystemUpdateInfo {
+  currentVersion: string | null;
+  latest: {
+    packageName: string;
+    distTag: string;
+    version: string;
+    fetchedAt: string;
+  };
+  status: {
+    status: "idle" | "pending" | "running" | "success" | "failed";
+    version: string | null;
+    requestedAt: string | null;
+    startedAt: string | null;
+    finishedAt: string | null;
+    message: string | null;
+  };
 }
 
 export interface DeviceLogin {

@@ -8,20 +8,40 @@ import {
   createMyTokenKey,
   type MyTokenKeyRecord,
   type CreateMyTokenKeyOptions,
+  type UpdateMyTokenKeyPolicy,
 } from "@mytoken/key-auth";
 import { openAiError } from "@mytoken/openai-compat";
 
 import type { ApiKeyStore } from "./app.js";
+import { validateIpAllowlist } from "./request-policy.js";
+import type { RequestPolicyManager } from "./request-policy.js";
+import type { GatewayUsageStore } from "./usage-store.js";
+import type { SystemUpdateService } from "./system-update-service.js";
 
 export interface ApiKeyManagementStore extends ApiKeyStore {
   create(record: MyTokenKeyRecord): void;
   revoke(keyId: string, now?: number): boolean;
   list(): Promise<readonly MyTokenKeyRecord[]>;
+  touchLastUsed(keyId: string, now?: number): void;
+  updatePolicy(keyId: string, patch: UpdateMyTokenKeyPolicy): Promise<boolean>;
 }
 
 export interface CodexAdminBackend {
   account(): Promise<unknown>;
   rateLimits(): Promise<unknown>;
+  usage(): Promise<unknown>;
+  listModels(): Promise<readonly { id: string; displayName: string }[]>;
+  providerStatuses?(): Promise<
+    readonly {
+      id: string;
+      name: string;
+      protocol: string;
+      enabled: boolean;
+      ready: boolean;
+      modelsCount: number;
+      error: string | null;
+    }[]
+  >;
   startDeviceLogin(): Promise<unknown>;
   cancelDeviceLogin(loginId: string): Promise<unknown>;
   logoutAccount(): Promise<unknown>;
@@ -33,6 +53,9 @@ export interface RegisterAdminRoutesOptions {
   keyPepper: Uint8Array;
   cookieSecure: boolean;
   codexBackend?: CodexAdminBackend;
+  usageStore?: GatewayUsageStore;
+  policyManager?: RequestPolicyManager;
+  systemUpdate?: SystemUpdateService;
 }
 
 const setupSchema = z
@@ -60,8 +83,16 @@ const createKeySchema = z
     rpmLimit: z.number().int().min(1).max(10_000).optional(),
     dailyRequestLimit: z.number().int().min(1).max(1_000_000).optional(),
     maxConcurrency: z.number().int().min(1).max(32).optional(),
+    ipAllowlist: z.array(z.string().min(1).max(128)).max(64).optional(),
+    requestBudget: z.number().int().min(1).max(100_000_000).nullable().optional(),
+    tokenBudget: z.number().int().min(1).max(1_000_000_000_000).nullable().optional(),
   })
   .strict();
+
+const updateKeySchema = createKeySchema
+  .omit({ mode: true, name: true })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0);
 
 export function registerAdminRoutes(
   app: FastifyInstance,
@@ -155,7 +186,22 @@ export function registerAdminRoutes(
       name: parsed.data.name,
       allowedModels: parsed.data.allowedModels ?? [],
       allowClientTools: parsed.data.allowClientTools ?? false,
+      ipAllowlist: parsed.data.ipAllowlist ?? [],
+      requestBudget: parsed.data.requestBudget ?? null,
+      tokenBudget: parsed.data.tokenBudget ?? null,
     };
+    try {
+      validateIpAllowlist(keyOptions.ipAllowlist ?? []);
+    } catch {
+      return adminError(reply, 400, "Invalid IP or CIDR allowlist", "invalid_ip_allowlist");
+    }
+    if ((keyOptions.allowedModels?.length ?? 0) > 0 && options.codexBackend) {
+      const available = new Set((await options.codexBackend.listModels()).map((model) => model.id));
+      const unknown = keyOptions.allowedModels?.find((model) => !available.has(model));
+      if (unknown) {
+        return adminError(reply, 400, `Unknown or unavailable model: ${unknown}`, "invalid_model");
+      }
+    }
     if (parsed.data.expiresAt !== undefined) keyOptions.expiresAt = parsed.data.expiresAt;
     if (parsed.data.rpmLimit !== undefined) keyOptions.rpmLimit = parsed.data.rpmLimit;
     if (parsed.data.dailyRequestLimit !== undefined) {
@@ -169,11 +215,25 @@ export function registerAdminRoutes(
     return reply.code(201).send({
       key: created.plaintext,
       id: created.record.id,
+      mode: created.record.mode,
       name: created.record.name,
       prefix: created.record.prefix,
+      createdAt: created.record.createdAt,
       expiresAt: created.record.expiresAt,
+      revokedAt: created.record.revokedAt,
+      lastUsedAt: created.record.lastUsedAt,
       allowedModels: created.record.allowedModels,
       allowClientTools: created.record.allowClientTools,
+      rpmLimit: created.record.rpmLimit,
+      dailyRequestLimit: created.record.dailyRequestLimit,
+      maxConcurrency: created.record.maxConcurrency,
+      ipAllowlist: created.record.ipAllowlist,
+      requestBudget: created.record.requestBudget,
+      tokenBudget: created.record.tokenBudget,
+      requestBalance: created.record.requestBudget,
+      tokenBalance: created.record.tokenBudget,
+      activeRequests: 0,
+      usage: emptyUsage(),
     });
   });
 
@@ -183,23 +243,89 @@ export function registerAdminRoutes(
     if (!session) return;
     const records = await options.keyStore.list();
     return {
-      data: records.map((record) => ({
-        id: record.id,
-        mode: record.mode,
-        name: record.name,
-        prefix: record.prefix,
-        createdAt: record.createdAt,
-        expiresAt: record.expiresAt,
-        revokedAt: record.revokedAt,
-        lastUsedAt: record.lastUsedAt,
-        allowedModels: record.allowedModels,
-        allowClientTools: record.allowClientTools,
-        rpmLimit: record.rpmLimit,
-        dailyRequestLimit: record.dailyRequestLimit,
-        maxConcurrency: record.maxConcurrency,
-      })),
+      data: records.map((record) => {
+        const usage = options.usageStore?.usage(record.id) ?? emptyUsage();
+        return {
+          id: record.id,
+          mode: record.mode,
+          name: record.name,
+          prefix: record.prefix,
+          createdAt: record.createdAt,
+          expiresAt: record.expiresAt,
+          revokedAt: record.revokedAt,
+          lastUsedAt: record.lastUsedAt,
+          allowedModels: record.allowedModels,
+          allowClientTools: record.allowClientTools,
+          rpmLimit: record.rpmLimit,
+          dailyRequestLimit: record.dailyRequestLimit,
+          maxConcurrency: record.maxConcurrency,
+          ipAllowlist: record.ipAllowlist,
+          requestBudget: record.requestBudget,
+          tokenBudget: record.tokenBudget,
+          requestBalance:
+            record.requestBudget === null
+              ? null
+              : Math.max(0, record.requestBudget - usage.billableRequests),
+          tokenBalance:
+            record.tokenBudget === null
+              ? null
+              : Math.max(0, record.tokenBudget - usage.totalTokens),
+          activeRequests: options.policyManager?.activeForKey(record.id) ?? 0,
+          usage,
+        };
+      }),
     };
   });
+
+  if (options.usageStore) {
+    app.get("/api/admin/requests", async (request, reply) => {
+      noStore(reply);
+      const session = authenticateAdmin(request, reply, options, cookieName);
+      if (!session) return;
+      const query = request.query as { keyId?: string; limit?: string; offset?: string };
+      const limit = boundedInteger(query.limit, 100, 1, 200);
+      const offset = boundedInteger(query.offset, 0, 0, 1_000_000);
+      return {
+        data: options.usageStore?.list({
+          ...(query.keyId ? { apiKeyId: query.keyId } : {}),
+          limit,
+          offset,
+        }),
+      };
+    });
+  }
+
+  const systemUpdate = options.systemUpdate;
+  if (systemUpdate) {
+    app.get("/api/admin/system/update", async (request, reply) => {
+      noStore(reply);
+      const session = authenticateAdmin(request, reply, options, cookieName);
+      if (!session) return;
+      const [latest, status] = await Promise.all([
+        systemUpdate.getLatestVersion(),
+        systemUpdate.readStatus(),
+      ]);
+      return {
+        currentVersion: systemUpdate.currentVersion,
+        latest,
+        status,
+      };
+    });
+    app.post(
+      "/api/admin/system/update",
+      { config: { rateLimit: { max: 1, timeWindow: "10 minutes" } } },
+      async (request, reply) => {
+        noStore(reply);
+        const session = authenticateAdmin(request, reply, options, cookieName, true);
+        if (!session) return;
+        if (!sameOrigin(request)) {
+          return adminError(reply, 403, "Update request origin was rejected", "invalid_origin");
+        }
+        const requested = await systemUpdate.requestUpdate();
+        return reply.code(202).send({ requested });
+      },
+    );
+  }
 
   app.post("/api/admin/keys/:keyId/revoke", async (request, reply) => {
     noStore(reply);
@@ -210,6 +336,51 @@ export function registerAdminRoutes(
       return adminError(reply, 404, "Key was not found", "key_not_found");
     }
     return { revoked: true };
+  });
+
+  app.patch("/api/admin/keys/:keyId", async (request, reply) => {
+    noStore(reply);
+    const session = authenticateAdmin(request, reply, options, cookieName, true);
+    if (!session) return;
+    const params = request.params as { keyId?: string };
+    const parsed = updateKeySchema.safeParse(request.body);
+    if (!params.keyId || !parsed.success) {
+      return adminError(reply, 400, "Invalid key policy update", "invalid_key_policy");
+    }
+    if (parsed.data.ipAllowlist) {
+      try {
+        validateIpAllowlist(parsed.data.ipAllowlist);
+      } catch {
+        return adminError(reply, 400, "Invalid IP or CIDR allowlist", "invalid_ip_allowlist");
+      }
+    }
+    if (parsed.data.allowedModels && options.codexBackend) {
+      const available = new Set((await options.codexBackend.listModels()).map((model) => model.id));
+      const unknown = parsed.data.allowedModels.find((model) => !available.has(model));
+      if (unknown) {
+        return adminError(reply, 400, `Unknown or unavailable model: ${unknown}`, "invalid_model");
+      }
+    }
+    const patch: UpdateMyTokenKeyPolicy = {};
+    if (parsed.data.expiresAt !== undefined) patch.expiresAt = parsed.data.expiresAt;
+    if (parsed.data.allowedModels !== undefined) patch.allowedModels = parsed.data.allowedModels;
+    if (parsed.data.allowClientTools !== undefined) {
+      patch.allowClientTools = parsed.data.allowClientTools;
+    }
+    if (parsed.data.rpmLimit !== undefined) patch.rpmLimit = parsed.data.rpmLimit;
+    if (parsed.data.dailyRequestLimit !== undefined) {
+      patch.dailyRequestLimit = parsed.data.dailyRequestLimit;
+    }
+    if (parsed.data.maxConcurrency !== undefined) {
+      patch.maxConcurrency = parsed.data.maxConcurrency;
+    }
+    if (parsed.data.ipAllowlist !== undefined) patch.ipAllowlist = parsed.data.ipAllowlist;
+    if (parsed.data.requestBudget !== undefined) patch.requestBudget = parsed.data.requestBudget;
+    if (parsed.data.tokenBudget !== undefined) patch.tokenBudget = parsed.data.tokenBudget;
+    if (!(await options.keyStore.updatePolicy(params.keyId, patch))) {
+      return adminError(reply, 404, "Key was not found", "key_not_found");
+    }
+    return { updated: true };
   });
 
   if (options.codexBackend) registerCodexRoutes(app, options, cookieName);
@@ -226,14 +397,54 @@ function registerCodexRoutes(
     noStore(reply);
     const session = authenticateAdmin(request, reply, options, cookieName);
     if (!session) return;
-    const [account, rateLimits] = await Promise.all([backend.account(), backend.rateLimits()]);
-    return { account: normalizeAccount(account), rateLimits: normalizeRateLimits(rateLimits) };
+    const account = await backend.account();
+    const [rateLimitsResult, usageResult] = await Promise.allSettled([
+      backend.rateLimits(),
+      backend.usage(),
+    ]);
+    return {
+      account: normalizeAccount(account),
+      rateLimits: normalizeRateLimits(
+        rateLimitsResult.status === "fulfilled" ? rateLimitsResult.value : undefined,
+      ),
+      usage: normalizeUsage(usageResult.status === "fulfilled" ? usageResult.value : undefined),
+    };
+  });
+  app.get("/api/admin/models", async (request, reply) => {
+    noStore(reply);
+    const session = authenticateAdmin(request, reply, options, cookieName);
+    if (!session) return;
+    return { data: await backend.listModels() };
+  });
+  app.get("/api/admin/providers", async (request, reply) => {
+    noStore(reply);
+    const session = authenticateAdmin(request, reply, options, cookieName);
+    if (!session) return;
+    return {
+      data: backend.providerStatuses
+        ? await backend.providerStatuses()
+        : [
+            {
+              id: "codex",
+              name: "Codex",
+              protocol: "codex-app-server",
+              enabled: true,
+              ready: true,
+              modelsCount: (await backend.listModels()).length,
+              error: null,
+            },
+          ],
+    };
   });
   app.post("/api/admin/codex/login", async (request, reply) => {
     noStore(reply);
     const session = authenticateAdmin(request, reply, options, cookieName, true);
     if (!session) return;
-    return backend.startDeviceLogin();
+    const account = normalizeAccount(await backend.account());
+    if (account.connected === true) {
+      return adminError(reply, 409, "Codex is already connected", "codex_already_connected");
+    }
+    return normalizeDeviceLogin(await backend.startDeviceLogin());
   });
   app.post("/api/admin/codex/login/cancel", async (request, reply) => {
     noStore(reply);
@@ -306,6 +517,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function sameOrigin(request: FastifyRequest): boolean {
+  const origin = request.headers.origin;
+  const host = request.headers.host;
+  if (typeof origin !== "string" || typeof host !== "string") return false;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
+}
+
 function normalizeAccount(value: unknown): Record<string, unknown> {
   if (!isRecord(value)) return { connected: false, status: "unknown" };
   const account = isRecord(value.account) ? value.account : undefined;
@@ -328,11 +550,88 @@ function normalizeRateLimits(value: unknown): Record<string, unknown> {
   const limits = isRecord(value.rateLimits) ? value.rateLimits : undefined;
   const primary = limits && isRecord(limits.primary) ? limits.primary : undefined;
   const secondary = limits && isRecord(limits.secondary) ? limits.secondary : undefined;
+  const byLimitId = isRecord(value.rateLimitsByLimitId)
+    ? Object.fromEntries(
+        Object.entries(value.rateLimitsByLimitId).map(([key, entry]) => [
+          key,
+          normalizeRateLimitBucket(entry),
+        ]),
+      )
+    : {};
   return {
     available: Boolean(limits),
     primary: normalizeWindow(primary),
     secondary: normalizeWindow(secondary),
+    byLimitId,
+    resetCredits: normalizeResetCredits(value.rateLimitResetCredits),
     observedAt: Date.now(),
+  };
+}
+
+function normalizeRateLimitBucket(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  return {
+    limitId: typeof value.limitId === "string" ? value.limitId : null,
+    limitName: typeof value.limitName === "string" ? value.limitName : null,
+    planType: typeof value.planType === "string" ? value.planType : null,
+    credits: typeof value.credits === "number" ? value.credits : null,
+    rateLimitReachedType:
+      typeof value.rateLimitReachedType === "string" ? value.rateLimitReachedType : null,
+    primary: normalizeWindow(isRecord(value.primary) ? value.primary : undefined),
+    secondary: normalizeWindow(isRecord(value.secondary) ? value.secondary : undefined),
+  };
+}
+
+function normalizeResetCredits(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  return {
+    availableCount: typeof value.availableCount === "number" ? value.availableCount : null,
+  };
+}
+
+function normalizeUsage(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) return { available: false, summary: null, dailyUsageBuckets: null };
+  const summary = isRecord(value.summary) ? value.summary : undefined;
+  const buckets = Array.isArray(value.dailyUsageBuckets)
+    ? value.dailyUsageBuckets.flatMap((entry) =>
+        isRecord(entry) && typeof entry.startDate === "string" && typeof entry.tokens === "number"
+          ? [{ startDate: entry.startDate, tokens: entry.tokens }]
+          : [],
+      )
+    : null;
+  return {
+    available: Boolean(summary || buckets),
+    summary: summary
+      ? {
+          lifetimeTokens: numberOrNull(summary.lifetimeTokens),
+          peakDailyTokens: numberOrNull(summary.peakDailyTokens),
+          longestRunningTurnSec: numberOrNull(summary.longestRunningTurnSec),
+          currentStreakDays: numberOrNull(summary.currentStreakDays),
+          longestStreakDays: numberOrNull(summary.longestStreakDays),
+        }
+      : null,
+    dailyUsageBuckets: buckets,
+    observedAt: Date.now(),
+  };
+}
+
+function normalizeDeviceLogin(value: unknown): Record<string, unknown> {
+  if (
+    !isRecord(value) ||
+    value.type !== "chatgptDeviceCode" ||
+    typeof value.loginId !== "string" ||
+    typeof value.verificationUrl !== "string" ||
+    typeof value.userCode !== "string"
+  ) {
+    throw new Error("Codex returned an invalid device login response");
+  }
+  const url = new URL(value.verificationUrl);
+  if (url.protocol !== "https:") throw new Error("Codex returned an unsafe login URL");
+  return {
+    type: "chatgptDeviceCode",
+    loginId: value.loginId,
+    verificationUrl: url.toString(),
+    userCode: value.userCode,
   };
 }
 
@@ -354,4 +653,43 @@ function maskEmail(email: string): string {
   const local = email.slice(0, separator);
   const domain = email.slice(separator + 1);
   return `${local.slice(0, 1)}***@${domain}`;
+}
+
+function boundedInteger(
+  value: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function emptyUsage(): {
+  totalRequests: number;
+  billableRequests: number;
+  todayRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  lastRequestAt: null;
+} {
+  return {
+    totalRequests: 0,
+    billableRequests: 0,
+    todayRequests: 0,
+    successfulRequests: 0,
+    failedRequests: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    lastRequestAt: null,
+  };
 }

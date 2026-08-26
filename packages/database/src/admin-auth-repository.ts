@@ -27,6 +27,17 @@ export class AdminAuthRepository implements AdminAuthStore {
     return result.changes === 1;
   }
 
+  canConsumeBootstrap(tokenDigest: string): boolean {
+    const row = this.database.sqlite
+      .prepare(
+        `SELECT 1 FROM bootstrap_state
+         WHERE singleton_id = 1 AND token_digest = ? AND consumed_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM admin_users LIMIT 1)`,
+      )
+      .get(tokenDigest);
+    return Boolean(row);
+  }
+
   consumeBootstrap(input: { tokenDigest: string; user: AdminUserRecord; now: number }): boolean {
     this.database.sqlite.exec("BEGIN IMMEDIATE");
     try {

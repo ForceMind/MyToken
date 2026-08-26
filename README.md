@@ -25,6 +25,11 @@ Implemented and verified offline:
 - separate API/worker startup entrypoints with Unix-socket transport;
 - Linux systemd, tmpfiles, credential, and secret-generation templates.
 - React/Vite/Tailwind management console for setup, login, Codex connection, and Key management.
+- per-Key model, IP/CIDR, RPM, daily, concurrency, request-balance, and token-budget controls;
+- request/IP/context/response logs, Key usage summaries, Codex quota and account-usage views;
+- built-in test chat and generic client/Codex custom-provider configuration guidance;
+- authenticated management-console updates through a constrained systemd updater;
+- ephemeral gateway threads that do not appear in the normal Codex conversation list.
 
 Not yet complete:
 
@@ -32,6 +37,7 @@ Not yet complete:
 - Linux/systemd verification;
 - real OpenClaw E2E.
 - automated browser E2E.
+- live authenticated Codex/OpenClaw streaming validation behind the production reverse proxy.
 
 ## Security boundary
 
@@ -41,11 +47,13 @@ OpenClaw client tools are represented as app-server dynamic tools, but they are 
 
 See [Architecture](docs/ARCHITECTURE.md), [Threat Model](docs/THREAT_MODEL.md), and [API Compatibility](docs/API_COMPATIBILITY.md).
 
+For Claude, DeepSeek, and additional OpenAI Responses-compatible upstreams, see [Model Providers](docs/PROVIDERS.md).
+
 For moving this branch to a Linux server and continuing development with Codex there, see [Server Handoff](docs/SERVER_HANDOFF.md).
 
 For the one-click installer and terminal command reference, see [Terminal Operations](docs/OPERATIONS.md).
 
-Planned npm preview installation after registry publication:
+npm preview installation:
 
 ```bash
 sudo npx --yes mytoken-gateway@preview install

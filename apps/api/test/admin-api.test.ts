@@ -3,11 +3,17 @@ import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { AdminAuthService } from "@mytoken/admin-auth";
-import { AdminAuthRepository, ApiKeyRepository, MyTokenDatabase } from "@mytoken/database";
+import {
+  AdminAuthRepository,
+  ApiKeyRepository,
+  MyTokenDatabase,
+  RequestLogRepository,
+} from "@mytoken/database";
 import { createGatewayResponse } from "@mytoken/openai-compat";
 
 import type { CodexAdminBackend } from "../src/admin-routes.js";
 import { createApiApp, type GatewayBackend } from "../src/app.js";
+import { RequestPolicyManager } from "../src/request-policy.js";
 
 const apps: Array<Awaited<ReturnType<typeof createApiApp>>> = [];
 const databases: MyTokenDatabase[] = [];
@@ -29,6 +35,10 @@ const backend: GatewayBackend & CodexAdminBackend = {
   rateLimits: async () => ({
     rateLimits: { primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: 2_000 } },
   }),
+  usage: async () => ({
+    summary: { lifetimeTokens: 1000, peakDailyTokens: 100 },
+    dailyUsageBuckets: [{ startDate: "2026-08-25", tokens: 100 }],
+  }),
   startDeviceLogin: async () => ({
     type: "chatgptDeviceCode",
     loginId: "login-test",
@@ -48,6 +58,8 @@ describe("administrator API", () => {
     const bootstrap = adminAuth.createBootstrapToken();
     adminAuth.installBootstrapToken(bootstrap);
     const keyStore = new ApiKeyRepository(database);
+    const usageStore = new RequestLogRepository(database);
+    const policyManager = new RequestPolicyManager(usageStore, { globalConcurrency: 2 });
     const keyPepper = randomBytes(32);
     const app = await createApiApp({
       backend,
@@ -56,6 +68,8 @@ describe("administrator API", () => {
       keyPepper,
       adminAuth,
       codexAdminBackend: backend,
+      usageStore,
+      policyManager,
       cookieSecure: false,
     });
     apps.push(app);
@@ -126,6 +140,8 @@ describe("administrator API", () => {
         name: "OpenClaw",
         allowedModels: ["gpt-fixture"],
         allowClientTools: true,
+        ipAllowlist: ["127.0.0.1"],
+        requestBudget: 10,
       },
     });
     expect(created.statusCode).toBe(201);
@@ -148,6 +164,49 @@ describe("administrator API", () => {
     });
     expect(models.statusCode).toBe(200);
     expect(models.json()).toMatchObject({ data: [{ id: "gpt-fixture" }] });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/responses",
+      headers: { authorization: `Bearer ${plaintextKey}` },
+      payload: { model: "gpt-fixture", input: "hello", store: false },
+    });
+    expect(response.statusCode).toBe(200);
+
+    const usage = await app.inject({
+      method: "GET",
+      url: "/api/admin/keys",
+      headers: { cookie: sessionCookie },
+    });
+    expect(usage.json()).toMatchObject({
+      data: [{ requestBalance: 9, usage: { billableRequests: 1 } }],
+    });
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/keys/${created.json().id}`,
+      headers: {
+        cookie: sessionCookie,
+        "x-csrf-token": loginBody.csrfToken,
+      },
+      payload: { requestBudget: 20, ipAllowlist: ["127.0.0.1/32"] },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(await keyStore.getById(created.json().id)).toMatchObject({
+      requestBudget: 20,
+      ipAllowlist: ["127.0.0.1/32"],
+    });
+
+    const requests = await app.inject({
+      method: "GET",
+      url: "/api/admin/requests",
+      headers: { cookie: sessionCookie },
+    });
+    expect(requests.statusCode).toBe(200);
+    expect(requests.json().data[0]).toMatchObject({
+      path: "/v1/responses",
+      sourceIp: "127.0.0.1",
+    });
 
     const logout = await app.inject({
       method: "POST",

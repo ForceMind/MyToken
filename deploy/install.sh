@@ -61,6 +61,11 @@ cleanup() {
   case "$staging_dir" in
     /var/tmp/mytoken-build.*) rm -rf -- "$staging_dir" ;;
   esac
+  if [ -n "${runtime_backup_dir:-}" ]; then
+    case "$runtime_backup_dir" in
+      /var/tmp/mytoken-runtime-backup.*) rm -rf -- "$runtime_backup_dir" ;;
+    esac
+  fi
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -113,7 +118,7 @@ if [ ! -e "$environment_file" ]; then
   environment_tmp="$(mktemp /etc/mytoken/mytoken.env.XXXXXX)"
   cat > "$environment_tmp" <<EOF
 NODE_ENV=production
-MYTOKEN_VERSION=0.1.0
+MYTOKEN_VERSION=0.1.0-preview.2
 MYTOKEN_HOST=127.0.0.1
 MYTOKEN_PORT=8080
 MYTOKEN_WEB_ROOT=$install_dir/apps/web/dist
@@ -129,6 +134,11 @@ MYTOKEN_REQUEST_TIMEOUT_MS=120000
 MYTOKEN_TOOL_RESULT_TIMEOUT_MS=300000
 MYTOKEN_MAX_PENDING_TOOL_CALLS=8
 MYTOKEN_MAX_TOOL_RESULT_BYTES=1048576
+MYTOKEN_MAX_GLOBAL_CONCURRENCY=1
+MYTOKEN_TRUST_PROXY=
+MYTOKEN_PROVIDERS_FILE=/etc/mytoken/providers.json
+MYTOKEN_ALLOW_INSECURE_PROVIDERS=false
+MYTOKEN_PROVIDER_REQUEST_TIMEOUT_MS=120000
 EOF
   chown root:mytoken "$environment_tmp"
   chmod 0640 "$environment_tmp"
@@ -145,6 +155,24 @@ for required_key in MYTOKEN_DB_PATH MYTOKEN_WORKER_SOCKET MYTOKEN_CODEX_BIN \
   fi
 done
 
+ensure_env_default() {
+  key="$1"
+  value="$2"
+  if ! grep -q "^$key=" "$environment_file"; then
+    printf '%s=%s\n' "$key" "$value" >> "$environment_file"
+  fi
+}
+ensure_env_default MYTOKEN_MAX_GLOBAL_CONCURRENCY 1
+ensure_env_default MYTOKEN_TRUST_PROXY ""
+ensure_env_default MYTOKEN_PROVIDERS_FILE /etc/mytoken/providers.json
+ensure_env_default MYTOKEN_ALLOW_INSECURE_PROVIDERS false
+ensure_env_default MYTOKEN_PROVIDER_REQUEST_TIMEOUT_MS 120000
+
+if [ ! -e /etc/mytoken/providers.json ]; then
+  install -o root -g mytoken-api -m 0640 \
+    "$staging_dir/deploy/providers.example.json" /etc/mytoken/providers.json
+fi
+
 api_was_active=false
 worker_was_active=false
 systemctl is-active --quiet mytoken-api.service && api_was_active=true
@@ -152,17 +180,37 @@ systemctl is-active --quiet mytoken-worker.service && worker_was_active=true
 if [ "$api_was_active" = "true" ]; then systemctl stop mytoken-api.service; fi
 if [ "$worker_was_active" = "true" ]; then systemctl stop mytoken-worker.service; fi
 
-database_path="/var/lib/mytoken/api/mytoken.sqlite"
+database_path="$(sed -n 's/^MYTOKEN_DB_PATH=//p' "$environment_file" | head -n 1)"
 if [ -f "$database_path" ]; then
   backup_dir="/var/lib/mytoken/api/backups"
   install -d -o mytoken-api -g mytoken-api -m 0700 "$backup_dir"
   backup_path="$backup_dir/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ).sqlite"
+  runuser -u mytoken-api -- env MYTOKEN_DB_PATH="$database_path" /usr/bin/env node -e '
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync(process.env.MYTOKEN_DB_PATH);
+    db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    const row = db.prepare("PRAGMA integrity_check").get();
+    db.close();
+    if (row.integrity_check !== "ok") process.exit(1);
+  '
   cp --preserve=mode,ownership,timestamps "$database_path" "$backup_path"
+  runuser -u mytoken-api -- env MYTOKEN_DB_PATH="$backup_path" /usr/bin/env node -e '
+    const { DatabaseSync } = require("node:sqlite");
+    const db = new DatabaseSync(process.env.MYTOKEN_DB_PATH, { readOnly: true });
+    const row = db.prepare("PRAGMA integrity_check").get();
+    db.close();
+    if (row.integrity_check !== "ok") process.exit(1);
+  '
   printf '%s\n' "Database backup created: $backup_path"
 fi
 
+runtime_backup_dir=""
+if [ -d "$install_dir" ] && [ -f "$install_dir/package.json" ]; then
+  runtime_backup_dir="$(mktemp -d /var/tmp/mytoken-runtime-backup.XXXXXX)"
+  rsync -a "$install_dir/" "$runtime_backup_dir/"
+fi
 install -d -o root -g root -m 0755 "$install_dir"
-rsync -a --exclude .git --exclude node_modules --exclude coverage "$staging_dir/" "$install_dir/"
+rsync -a --delete --exclude .git --exclude node_modules --exclude coverage "$staging_dir/" "$install_dir/"
 chown -R root:root "$install_dir"
 (
   cd "$install_dir"
@@ -171,10 +219,16 @@ chown -R root:root "$install_dir"
 
 install -m 0644 "$install_dir/deploy/systemd/mytoken-worker.service" /etc/systemd/system/
 install -m 0644 "$install_dir/deploy/systemd/mytoken-api.service" /etc/systemd/system/
+install -m 0644 "$install_dir/deploy/systemd/mytoken-update.service" /etc/systemd/system/
+install -m 0644 "$install_dir/deploy/systemd/mytoken-update.path" /etc/systemd/system/
 install -m 0755 "$install_dir/deploy/bin/mytokenctl" /usr/local/sbin/mytokenctl
+install -d -o root -g root -m 0755 /usr/local/libexec
+install -o root -g root -m 0755 \
+  "$install_dir/deploy/bin/mytoken-update-runner" /usr/local/libexec/mytoken-update-runner
 
 systemctl daemon-reload
-systemctl enable mytoken-worker.service mytoken-api.service >/dev/null
+systemctl enable mytoken-worker.service mytoken-api.service mytoken-update.path >/dev/null
+systemctl restart mytoken-update.path
 systemctl restart mytoken-worker.service
 systemctl restart mytoken-api.service
 
@@ -190,7 +244,15 @@ while [ "$attempt" -le 30 ]; do
 done
 
 if [ "$health_ok" != "true" ]; then
-  printf '%s\n' "MyToken did not become healthy. Inspect: mytokenctl logs all" >&2
+  printf '%s\n' "MyToken did not become healthy; attempting runtime rollback." >&2
+  if [ -n "$runtime_backup_dir" ]; then
+    systemctl stop mytoken-api.service mytoken-worker.service || true
+    rsync -a --delete "$runtime_backup_dir/" "$install_dir/"
+    systemctl daemon-reload
+    systemctl restart mytoken-worker.service
+    systemctl restart mytoken-api.service
+    printf '%s\n' "Previous runtime restored. Inspect: mytokenctl logs all" >&2
+  fi
   exit 1
 fi
 

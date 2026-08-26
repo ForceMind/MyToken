@@ -35,6 +35,7 @@ export interface AuthenticatedAdminSession {
 export interface AdminAuthStore {
   isInitialized(): boolean;
   setBootstrapToken(tokenDigest: string, now: number): boolean;
+  canConsumeBootstrap(tokenDigest: string): boolean;
   consumeBootstrap(input: { tokenDigest: string; user: AdminUserRecord; now: number }): boolean;
   findUserByUsername(username: string): AdminUserRecord | undefined;
   createSession(session: AdminSessionRecord): void;
@@ -118,6 +119,10 @@ export class AdminAuthService {
   }): Promise<{ id: string; username: string }> {
     validateUsername(input.username);
     validatePassword(input.password);
+    const tokenDigest = sha256(input.bootstrapToken);
+    if (!this.#store.canConsumeBootstrap(tokenDigest)) {
+      throw new MyTokenError("invalid_bootstrap", "Bootstrap token is invalid or already consumed");
+    }
     const now = this.#now();
     const user: AdminUserRecord = {
       id: randomBytes(16).toString("hex"),
@@ -129,7 +134,7 @@ export class AdminAuthService {
       disabledAt: null,
     };
     const consumed = this.#store.consumeBootstrap({
-      tokenDigest: sha256(input.bootstrapToken),
+      tokenDigest,
       user,
       now,
     });

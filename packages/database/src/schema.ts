@@ -54,6 +54,9 @@ export const apiKeys = sqliteTable(
     rpmLimit: integer("rpm_limit").notNull(),
     dailyRequestLimit: integer("daily_request_limit").notNull(),
     maxConcurrency: integer("max_concurrency").notNull(),
+    ipAllowlistJson: text("ip_allowlist_json").notNull(),
+    requestBudget: integer("request_budget"),
+    tokenBudget: integer("token_budget"),
   },
   (table) => [index("api_keys_status_index").on(table.revokedAt, table.expiresAt)],
 );
@@ -134,3 +137,39 @@ export const bootstrapState = sqliteTable("bootstrap_state", {
   createdAt: integer("created_at").notNull(),
   consumedAt: integer("consumed_at"),
 });
+
+export const requestLogs = sqliteTable(
+  "request_logs",
+  {
+    id: text("id").primaryKey(),
+    requestId: text("request_id").notNull(),
+    apiKeyId: text("api_key_id")
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    method: text("method").notNull(),
+    path: text("path").notNull(),
+    model: text("model"),
+    providerId: text("provider_id").notNull(),
+    upstreamModel: text("upstream_model"),
+    billable: integer("billable").notNull(),
+    statusCode: integer("status_code"),
+    status: text("status").notNull(),
+    startedAt: integer("started_at").notNull(),
+    completedAt: integer("completed_at"),
+    latencyMs: integer("latency_ms"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    totalTokens: integer("total_tokens"),
+    errorCode: text("error_code"),
+    sourceIp: text("source_ip").notNull(),
+    userAgent: text("user_agent"),
+    requestBodyJson: text("request_body_json").notNull(),
+    responseBodyJson: text("response_body_json"),
+  },
+  (table) => [
+    uniqueIndex("request_logs_request_id_unique").on(table.requestId),
+    index("request_logs_api_key_started_index").on(table.apiKeyId, table.startedAt),
+    index("request_logs_started_index").on(table.startedAt),
+    index("request_logs_provider_started_index").on(table.providerId, table.startedAt),
+  ],
+);

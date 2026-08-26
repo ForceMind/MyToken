@@ -105,4 +105,45 @@ CREATE TABLE bootstrap_state (
 );
 `,
   },
+  {
+    id: "0002_key_usage_and_request_logs",
+    sql: `
+ALTER TABLE api_keys ADD COLUMN ip_allowlist_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE api_keys ADD COLUMN request_budget INTEGER CHECK(request_budget IS NULL OR request_budget > 0);
+ALTER TABLE api_keys ADD COLUMN token_budget INTEGER CHECK(token_budget IS NULL OR token_budget > 0);
+CREATE TABLE request_logs (
+  id TEXT PRIMARY KEY NOT NULL,
+  request_id TEXT NOT NULL UNIQUE,
+  api_key_id TEXT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+  method TEXT NOT NULL,
+  path TEXT NOT NULL,
+  model TEXT,
+  billable INTEGER NOT NULL CHECK(billable IN (0, 1)),
+  status_code INTEGER,
+  status TEXT NOT NULL CHECK(status IN ('in_progress', 'completed', 'failed')),
+  started_at INTEGER NOT NULL,
+  completed_at INTEGER,
+  latency_ms INTEGER,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  total_tokens INTEGER,
+  error_code TEXT,
+  source_ip TEXT NOT NULL,
+  user_agent TEXT,
+  request_body_json TEXT NOT NULL,
+  response_body_json TEXT
+);
+CREATE INDEX request_logs_api_key_started_index ON request_logs(api_key_id, started_at);
+CREATE INDEX request_logs_started_index ON request_logs(started_at);
+`,
+  },
+  {
+    id: "0003_request_provider_dimensions",
+    sql: `
+ALTER TABLE request_logs ADD COLUMN provider_id TEXT NOT NULL DEFAULT 'codex';
+ALTER TABLE request_logs ADD COLUMN upstream_model TEXT;
+UPDATE request_logs SET upstream_model = model WHERE model IS NOT NULL;
+CREATE INDEX request_logs_provider_started_index ON request_logs(provider_id, started_at);
+`,
+  },
 ];

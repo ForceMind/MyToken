@@ -135,6 +135,18 @@ function completeTurn(threadId, turnId, text) {
     params: { threadId, turnId, itemId: `message-${turnId}`, delta: text },
   });
   send({
+    method: "thread/tokenUsage/updated",
+    params: {
+      threadId,
+      turnId,
+      tokenUsage: {
+        total: { inputTokens: 12, outputTokens: 5, totalTokens: 17 },
+        last: { inputTokens: 12, outputTokens: 5, totalTokens: 17 },
+        modelContextWindow: 128000,
+      },
+    },
+  });
+  send({
     method: "turn/completed",
     params: {
       threadId,

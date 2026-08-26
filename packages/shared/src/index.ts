@@ -42,3 +42,41 @@ export function redactText(value: string): string {
 export function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
 }
+
+export interface KeyUsageSummary {
+  totalRequests: number;
+  billableRequests: number;
+  todayRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  lastRequestAt: number | null;
+}
+
+export interface GatewayRequestLogRecord {
+  id: string;
+  requestId: string;
+  apiKeyId: string;
+  keyName: string;
+  method: string;
+  path: string;
+  model: string | null;
+  providerId: string;
+  upstreamModel: string | null;
+  billable: boolean;
+  statusCode: number | null;
+  status: "in_progress" | "completed" | "failed";
+  startedAt: number;
+  completedAt: number | null;
+  latencyMs: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  errorCode: string | null;
+  sourceIp: string;
+  userAgent: string | null;
+  requestBody: unknown;
+  responseBody: unknown;
+}

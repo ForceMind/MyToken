@@ -3,20 +3,21 @@
 ## Package
 
 - Name: `mytoken-gateway`
-- Preview version: `0.1.0-preview.1`
+- Next preview version: `0.1.0-preview.2`
 - Public install command: `sudo npx --yes mytoken-gateway@preview install`
 - Published contents: CLI, README, and Apache-2.0 license only
-- Default source ref: immutable Git tag `v0.1.0-preview.1`
+- Default source ref: release Git tag matching the npm package version
+- Source commit: verified against the published npm `gitHead` metadata before installation
 
 The CLI clones the configured GitHub repository/ref, installs required common Linux tools and the pinned official `@openai/codex@0.147.0`, then runs the repository's tested deployment script.
 
-## Current blocker
+## Current registry state
 
-The current development machine is not authenticated to npm. `npm whoami` returns `ENEEDAUTH`. Do not paste an npm token into this repository, Codex, logs, or chat.
+`mytoken-gateway@0.1.0-preview.1` has been published. Both `preview` and `latest` currently point to that preview version; production instructions must continue using the explicit `@preview` tag until a stable release exists.
 
 ## Initial public preview publication
 
-The unscoped package name `mytoken-gateway` was not present in the public registry when checked on 2026-08-25. Availability is not reserved until the first successful publication.
+The initial package publication is complete. The following steps apply to subsequent preview versions.
 
 Authenticate interactively with publishing 2FA:
 

@@ -24,15 +24,15 @@ MyToken never reads or parses `auth.json`. The API process cannot access the Cod
 
 ### Arbitrary server execution
 
-Public tool definitions are translated only into app-server dynamic tools. The worker never executes their commands. Codex-native command, file, MCP, app, plugin, web, process, or permission events interrupt the turn.
+Public function definitions are translated only into app-server dynamic tools and are returned to the calling client for execution. Codex-native command, file, MCP, app, plugin, web, process, or permission events trigger an immediate defensive interrupt. Because app-server reports an item as it starts, this is detection and interruption rather than a proven execution-prevention boundary; public deployment remains blocked until a live adversarial test or stronger execution isolation closes that gap.
 
 ### Tool-result confusion
 
-Every pending call is bound to API key, public response, app-server generation, thread, turn, JSON-RPC request id, and tool call id. A result with any mismatched component is rejected. Results are one-shot and expire.
+Every in-memory pending call is bound to API key, public response, app-server generation, thread, turn, JSON-RPC request id, and tool call id. A result with a mismatched owner, turn, or generation is rejected. Results are one-shot and expire, but restart recovery is not yet implemented.
 
 ### Replay and duplicate execution
 
-Tool outputs are idempotent by `(responseId, callId)`. Duplicate identical output returns the recorded disposition; conflicting output fails closed. A worker generation change invalidates all pending calls.
+Duplicate call ids and duplicate outputs in one continuation fail closed. Durable replay dispositions across HTTP retries or worker restarts are not yet implemented. A worker generation change invalidates in-memory pending calls.
 
 ### Resource exhaustion
 

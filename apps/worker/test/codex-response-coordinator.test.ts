@@ -24,7 +24,10 @@ async function setup(): Promise<CodexResponseCoordinator> {
   clients.push(client);
   const broker = new OpenClawToolBroker({ resultTimeoutMs: 10_000 });
   broker.attach(client);
-  const coordinator = new CodexResponseCoordinator(client, broker, { responseTimeoutMs: 10_000 });
+  const coordinator = new CodexResponseCoordinator(client, broker, {
+    responseTimeoutMs: 10_000,
+    enableClientTools: true,
+  });
   await client.start({
     clientInfo: {
       name: "mytoken_gateway_test",
@@ -84,6 +87,7 @@ describe("CodexResponseCoordinator", () => {
 
     expect(second.status).toBe("completed");
     expect(second.output_text).toBe("Weather is 25 C");
+    expect(second.usage).toEqual({ input_tokens: 12, output_tokens: 5, total_tokens: 17 });
   });
 
   it("lists normalized models", async () => {
