@@ -1,5 +1,7 @@
 # Model Providers
 
+[English](PROVIDERS.md) | [简体中文](PROVIDERS.zh-CN.md)
+
 MyToken can aggregate multiple upstream model providers behind the same MyToken Key policy and OpenAI-compatible endpoint.
 
 ## Credential boundary

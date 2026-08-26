@@ -1,20 +1,20 @@
 # Server Deployment and Development Handoff
 
-This guide assumes an OpenCloudOS/RHEL-compatible server, a normal SSH development account, and sudo access. Keep the editable source tree separate from the root-owned runtime copy.
+This guide assumes an OpenCloudOS/RHEL-compatible server, a normal SSH development account, and sudo access. Keep the editable source tree separate from the root-owned runtime copy. For ordinary installation, prefer [Installation](INSTALLATION.md); this document is for continuing development on the server.
 
 ## 1. Publish or transfer the branch
 
-The implemented branch is `codex/feat-mytoken-v0-1`. It must exist on the server before Codex can continue there.
+The implementation is available on `main`. Create a separate `codex/` branch before making server-side changes.
 
 Preferred workflow:
 
 ```bash
 # On the current development machine, after authorization to publish:
-git push -u origin codex/feat-mytoken-v0-1
+git push origin main
 
 # On the server:
 sudo install -d -o "$USER" -g "$USER" -m 0750 /srv/mytoken-src
-git clone --branch codex/feat-mytoken-v0-1 \
+git clone --branch main \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 ```
@@ -23,13 +23,13 @@ If the branch must not be pushed, transfer the Git bundle instead:
 
 ```bash
 # Current development machine
-git bundle create mytoken-v0.1.bundle codex/feat-mytoken-v0-1
+git bundle create mytoken-v0.1.bundle main
 scp mytoken-v0.1.bundle YOUR_USER@YOUR_SERVER:/tmp/
 
 # Server
 git clone /tmp/mytoken-v0.1.bundle /srv/mytoken-src
 cd /srv/mytoken-src
-git switch codex/feat-mytoken-v0-1
+git switch -c codex/server-development
 ```
 
 The repository is Apache-2.0 licensed, but confirm the intended GitHub repository visibility before pushing.
@@ -38,8 +38,8 @@ An npm-installed preview checks out an immutable release tag. Before continuing 
 
 ```bash
 cd /srv/mytoken-src
-git fetch origin codex/feat-mytoken-v0-1
-git switch -c codex/feat-mytoken-v0-1 --track origin/codex/feat-mytoken-v0-1
+git fetch origin main
+git switch -c codex/server-development origin/main
 ```
 
 ## 2. Install prerequisites
@@ -138,7 +138,7 @@ Create `/etc/mytoken/mytoken.env`:
 
 ```text
 NODE_ENV=production
-MYTOKEN_VERSION=0.1.0
+MYTOKEN_VERSION=0.1.0-preview.4
 MYTOKEN_HOST=127.0.0.1
 MYTOKEN_PORT=8080
 MYTOKEN_WEB_ROOT=/opt/mytoken/apps/web/dist

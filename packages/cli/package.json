@@ -1,7 +1,7 @@
 {
   "name": "mytoken-gateway",
-  "version": "0.1.0-preview.3",
-  "description": "Installer and operations bootstrap for the self-hosted MyToken Personal Codex Gateway",
+  "version": "0.1.0-preview.4",
+  "description": "Installer and operations bootstrap for the self-hosted MyToken AI model gateway",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -30,6 +30,8 @@
   },
   "keywords": [
     "codex",
+    "anthropic",
+    "deepseek",
     "openclaw",
     "openai-compatible",
     "gateway",

@@ -1,5 +1,7 @@
 # Threat Model
 
+[English](THREAT_MODEL.md) | [简体中文](THREAT_MODEL.zh-CN.md)
+
 ## Protected assets
 
 - Codex-managed ChatGPT credentials and account access.

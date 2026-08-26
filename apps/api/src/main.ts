@@ -30,7 +30,7 @@ const policyManager = new RequestPolicyManager(requestLogRepository, {
   globalConcurrency: numberEnv("MYTOKEN_MAX_GLOBAL_CONCURRENCY", 1),
 });
 const systemUpdate = new SystemUpdateService({
-  currentVersion: process.env.MYTOKEN_VERSION ?? "0.1.0-preview.3",
+  currentVersion: process.env.MYTOKEN_VERSION ?? "0.1.0-preview.4",
 });
 const sessionSecret = await readSecret(requiredEnv("MYTOKEN_SESSION_SECRET_FILE"));
 const keyPepper = await readSecret(requiredEnv("MYTOKEN_KEY_PEPPER_FILE"));

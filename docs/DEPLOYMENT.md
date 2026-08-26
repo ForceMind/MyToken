@@ -2,7 +2,7 @@
 
 ## Status
 
-The unit files are authored for Linux/systemd but have not yet been runtime-verified on this macOS development host. Do not label the deployment production-ready until the live Linux checklist passes.
+The installer and update path have been exercised on an OpenCloudOS/systemd server. This remains private preview software; complete the security and reverse-proxy checklist for each target host before remote exposure.
 
 ## Users and directories
 
@@ -44,7 +44,7 @@ Create `/etc/mytoken/mytoken.env` owned by root and mode `0640`:
 
 ```text
 NODE_ENV=production
-MYTOKEN_VERSION=0.1.0
+MYTOKEN_VERSION=0.1.0-preview.4
 MYTOKEN_HOST=127.0.0.1
 MYTOKEN_PORT=8080
 MYTOKEN_WEB_ROOT=/opt/mytoken/apps/web/dist
@@ -57,6 +57,10 @@ MYTOKEN_REQUEST_TIMEOUT_MS=120000
 MYTOKEN_TOOL_RESULT_TIMEOUT_MS=300000
 MYTOKEN_MAX_PENDING_TOOL_CALLS=8
 MYTOKEN_MAX_TOOL_RESULT_BYTES=1048576
+MYTOKEN_MAX_GLOBAL_CONCURRENCY=1
+MYTOKEN_PROVIDERS_FILE=/etc/mytoken/providers.json
+MYTOKEN_ALLOW_INSECURE_PROVIDERS=false
+MYTOKEN_PROVIDER_REQUEST_TIMEOUT_MS=120000
 ```
 
 Generate secrets as root:
@@ -72,8 +76,10 @@ The bootstrap token is not logged. Read it directly on the trusted server, use i
 ```bash
 install -m 0644 deploy/systemd/mytoken-worker.service /etc/systemd/system/
 install -m 0644 deploy/systemd/mytoken-api.service /etc/systemd/system/
+install -m 0644 deploy/systemd/mytoken-update.service /etc/systemd/system/
+install -m 0644 deploy/systemd/mytoken-update.path /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now mytoken-worker mytoken-api
+systemctl enable --now mytoken-worker mytoken-api mytoken-update.path
 systemctl status mytoken-worker mytoken-api
 ```
 

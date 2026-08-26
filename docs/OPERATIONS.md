@@ -1,5 +1,7 @@
 # Terminal Operations
 
+[English](OPERATIONS.md) | [简体中文](OPERATIONS.zh-CN.md)
+
 The one-click installer places `mytokenctl` at `/usr/local/sbin/mytokenctl`. Run read-only commands as your normal SSH user. Commands that change service state or read protected files request sudo.
 
 ## Install or upgrade

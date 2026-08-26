@@ -1,130 +1,148 @@
 # MyToken Gateway
 
-Personal Codex Gateway — a private, single-administrator gateway that runs Codex on a trusted server and issues local MyToken credentials to approved clients.
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-> MyToken is an independent personal gateway and is not affiliated with, endorsed by, or operated by OpenAI.
->
-> MyToken 是独立的个人私有网关，与 OpenAI 不存在隶属、授权或官方合作关系。
+MyToken Gateway is a private, single-administrator AI model gateway for a trusted Linux server. It can use a server-local Codex/ChatGPT login and optional Anthropic, DeepSeek, or other OpenAI Responses-compatible providers, then issue restricted MyToken API keys to your own clients.
 
-## Status
+> MyToken is independent and is not affiliated with, endorsed by, or operated by OpenAI, Anthropic, or DeepSeek.
 
-V0.1 is under active development and is not production-ready.
+## What it provides
 
-Implemented and verified offline:
+- OpenAI-compatible `GET /v1/models`, `POST /v1/responses`, and text `POST /v1/chat/completions`;
+- live Responses and Chat Completions SSE for Codex;
+- Codex client function-tool continuation for Responses clients such as OpenClaw;
+- dynamic Codex, Claude, DeepSeek, and custom provider model catalogs;
+- per-key model, IP/CIDR, RPM, daily request, concurrency, request-balance, and token-budget controls;
+- request, IP, model, latency, token, context, response, and error logs;
+- a management console for Codex login, quotas, keys, providers, test chat, logs, and system status;
+- protected browser-triggered updates through a constrained systemd updater;
+- ephemeral Codex gateway threads that do not appear in the normal Codex conversation list.
 
-- pinned Codex `0.147.0` stable and experimental protocol artifacts;
-- bounded JSONL JSON-RPC app-server client;
-- fixed worker-internal route allowlist;
-- HMAC MyToken key creation, parsing, expiry, and revocation;
-- `/v1/models` and `/v1/responses` contract foundation;
-- text-only `/v1/chat/completions` compatibility for ordinary AI chat clients;
-- OpenClaw function-tool bridge with deterministic two-request fixture coverage;
-- OpenAI Responses SSE text and function-call event encoding.
-- SQLite/Drizzle schema, migrations, integrity checks, and persistent key records.
-- one-time administrator Bootstrap, Argon2id login, server-side Session, and CSRF;
-- separate API/worker startup entrypoints with Unix-socket transport;
-- Linux systemd, tmpfiles, credential, and secret-generation templates.
-- React/Vite/Tailwind management console for setup, login, Codex connection, and Key management.
-- per-Key model, IP/CIDR, RPM, daily, concurrency, request-balance, and token-budget controls;
-- request/IP/context/response logs, Key usage summaries, Codex quota and account-usage views;
-- built-in test chat and generic client/Codex custom-provider configuration guidance;
-- authenticated management-console updates through a constrained systemd updater;
-- ephemeral gateway threads that do not appear in the normal Codex conversation list.
+## Requirements
 
-Not yet complete:
+- Linux server using systemd;
+- Node.js 22.13 or newer and npm;
+- root or sudo access;
+- a trusted private deployment.
 
-- live Codex login and live dynamic-tool smoke tests;
-- Linux/systemd verification;
-- real OpenClaw E2E.
-- automated browser E2E.
-- live authenticated Codex/OpenClaw streaming validation behind the production reverse proxy.
+The installer supports OpenCloudOS/RHEL/Fedora and Debian/Ubuntu package tooling. The API binds to `127.0.0.1:8080` by default.
 
-## Security boundary
-
-Codex credentials remain under a dedicated server-side `CODEX_HOME` and are managed by Codex. MyToken must never parse or export `auth.json`.
-
-OpenClaw client tools are represented as app-server dynamic tools, but they are executed by OpenClaw, not by the MyToken server. Codex-native shell, file, MCP, plugin, app, web-search, process, and permission capabilities remain blocked for gateway turns.
-
-See [Architecture](docs/ARCHITECTURE.md), [Threat Model](docs/THREAT_MODEL.md), and [API Compatibility](docs/API_COMPATIBILITY.md).
-
-For Claude, DeepSeek, and additional OpenAI Responses-compatible upstreams, see [Model Providers](docs/PROVIDERS.md).
-
-For moving this branch to a Linux server and continuing development with Codex there, see [Server Handoff](docs/SERVER_HANDOFF.md).
-
-For the one-click installer and terminal command reference, see [Terminal Operations](docs/OPERATIONS.md).
-
-npm preview installation:
+## Install with npm — recommended
 
 ```bash
-sudo npx --yes mytoken-gateway@preview install
+sudo env \
+  npm_config_registry=https://registry.npmjs.org \
+  npx --yes mytoken-gateway@preview install
 ```
 
-See [npm Release](docs/NPM_RELEASE.md) for the inspected package contents, initial 2FA publication, and GitHub OIDC trusted-publishing workflow.
+The npm package is a small bootstrap CLI. It resolves its matching immutable Git tag, verifies npm integrity and published Git commit metadata, then runs the repository installer.
+
+## Install from GitHub
+
+Release tag, recommended for repeatable installation:
+
+```bash
+sudo git clone --branch v0.1.0-preview.4 --depth 1 \
+  https://github.com/ForceMind/MyToken.git /srv/mytoken-src
+cd /srv/mytoken-src
+sudo ./deploy/install.sh
+```
+
+Latest `main`, intended for development/testing:
+
+```bash
+sudo git clone --branch main \
+  https://github.com/ForceMind/MyToken.git /srv/mytoken-src
+cd /srv/mytoken-src
+sudo ./deploy/install.sh
+```
+
+Do not install from an unreviewed fork or branch as root.
+
+## First access
+
+The service stays on loopback. From your workstation:
+
+```bash
+ssh -L 8080:127.0.0.1:8080 YOUR_USER@YOUR_SERVER
+```
+
+On the server, read the one-time setup token:
+
+```bash
+sudo mytokenctl bootstrap-token
+```
+
+Then open `http://127.0.0.1:8080`, create the administrator, and check **Codex connection**. MyToken detects the dedicated server Codex login before offering a login flow.
+
+Terminal login is also available:
+
+```bash
+sudo mytokenctl codex-status
+sudo mytokenctl codex-login
+```
+
+## Add Claude or DeepSeek
+
+Each external provider requires its own upstream API key; a Codex login cannot authorize Claude or DeepSeek.
+
+```bash
+sudo mytokenctl provider-set anthropic
+sudo mytokenctl provider-set deepseek
+sudo mytokenctl provider-status
+```
+
+Model ids are exposed as bare ids for Codex, `anthropic/<model-id>` for Claude, `deepseek/<model-id>` for DeepSeek, and `<provider>/<model-id>` for configured compatible providers. See [Model Providers](docs/PROVIDERS.md).
+
+## Update
+
+After preview.3 or newer is installed, use **System → System update** in the management console, or run:
+
+```bash
+sudo env \
+  npm_config_registry=https://registry.npmjs.org \
+  npx --yes mytoken-gateway@preview update
+```
+
+Updates are single-flight, back up and integrity-check SQLite, verify exact release metadata, and restore the previous runtime when the health check fails.
+
+## Operations
+
+```bash
+mytokenctl status
+mytokenctl health
+mytokenctl ready
+mytokenctl doctor
+mytokenctl logs all
+sudo mytokenctl backup
+```
+
+See [Terminal Operations](docs/OPERATIONS.md) and [Installation](docs/INSTALLATION.md).
 
 ## Development
 
-Requirements:
-
-- Node.js 22 or newer
-- npm
-- Codex CLI `0.147.0` for the currently pinned contract
-
 ```bash
 npm ci
+npm run format:check
 npm run typecheck
 npm run lint
 npm test
+npm run test:integration
+npm run test:security
 npm run build
+npm run db:check
 npm run codex:check-contract
-npm run doctor
 ```
 
-Regenerate contracts only for a deliberately qualified new Codex version:
+## Project status and security
 
-```bash
-npm run codex:generate-schema
-```
+This is personal/private preview software, not a public commercial API service. Codex app-server and the dynamic tool bridge include experimental protocol surface. Native Codex execution items are defensively interrupted, but this is not yet a proven execution-prevention boundary. Keep MyToken private, require TLS and an additional identity layer before remote exposure, and issue keys only to devices you control.
 
-The generator refuses to overwrite an existing version directory.
-
-## Planned OpenClaw configuration
-
-The management console will generate this configuration from the live model catalog. It is not usable until the production server entrypoints and live tool probe are complete.
-
-```json5
-{
-  models: {
-    providers: {
-      mytoken: {
-        baseUrl: "https://mytoken.example.com/v1",
-        apiKey: "${MYTOKEN_API_KEY}",
-        api: "openai-responses",
-        models: [
-          {
-            id: "<model-id>",
-            name: "<model-name>",
-            reasoning: true,
-            input: ["text"],
-            compat: {
-              supportsTools: true,
-              supportsStrictMode: false,
-              supportsStore: false,
-              supportsReasoningEffort: true,
-              supportsTemperature: false,
-              supportsUsageInStreaming: false,
-            },
-          },
-        ],
-      },
-    },
-  },
-  agents: {
-    defaults: {
-      model: { primary: "mytoken/<model-id>" },
-    },
-  },
-}
-```
+- [Documentation index](docs/README.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Threat model](docs/THREAT_MODEL.md)
+- [API compatibility](docs/API_COMPATIBILITY.md)
+- [Deployment](docs/DEPLOYMENT.md)
 
 ## License
 

@@ -1,5 +1,7 @@
 # API Compatibility
 
+[English](API_COMPATIBILITY.md) | [简体中文](API_COMPATIBILITY.zh-CN.md)
+
 MyToken implements a documented subset of OpenAI-compatible APIs. It is not a drop-in replacement for every OpenAI API feature.
 
 | Surface                       | V0.1 target               | Notes                                               |
