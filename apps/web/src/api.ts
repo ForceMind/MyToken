@@ -90,6 +90,12 @@ export const api = {
       body: JSON.stringify({ loginId }),
     }),
   logoutCodex: () => request<unknown>("/api/admin/codex/logout", { method: "POST" }),
+  codexImportStatus: () => request<{ status: CodexImportStatus }>("/api/admin/codex/import"),
+  startCodexImport: (sourceUser: string) =>
+    request<{ requested: { id: string; sourceUser: string; requestedAt: string } }>(
+      "/api/admin/codex/import",
+      { method: "POST", body: JSON.stringify({ sourceUser }) },
+    ),
   health: () => request<{ status: string }>("/healthz"),
   ready: () => request<{ status: string }>("/readyz"),
   systemUpdate: () => request<SystemUpdateInfo>("/api/admin/system/update"),
@@ -327,6 +333,16 @@ export interface DeviceLogin {
   loginId: string;
   verificationUrl: string;
   userCode: string;
+}
+
+export interface CodexImportStatus {
+  status: "idle" | "pending" | "running" | "success" | "failed";
+  sourceUser: string | null;
+  code: string | null;
+  requestedAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  message: string | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -44,7 +44,7 @@ Create `/etc/mytoken/mytoken.env` owned by root and mode `0640`:
 
 ```text
 NODE_ENV=production
-MYTOKEN_VERSION=0.1.0-preview.8
+MYTOKEN_VERSION=0.1.0-preview.9
 MYTOKEN_HOST=127.0.0.1
 MYTOKEN_PORT=8080
 MYTOKEN_WEB_ROOT=/opt/mytoken/apps/web/dist
@@ -79,8 +79,10 @@ install -m 0644 deploy/systemd/mytoken-worker.service /etc/systemd/system/
 install -m 0644 deploy/systemd/mytoken-api.service /etc/systemd/system/
 install -m 0644 deploy/systemd/mytoken-update.service /etc/systemd/system/
 install -m 0644 deploy/systemd/mytoken-update.path /etc/systemd/system/
+install -m 0644 deploy/systemd/mytoken-codex-import.service /etc/systemd/system/
+install -m 0644 deploy/systemd/mytoken-codex-import.path /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now mytoken-worker mytoken-api mytoken-update.path
+systemctl enable --now mytoken-worker mytoken-api mytoken-update.path mytoken-codex-import.path
 systemctl status mytoken-worker mytoken-api
 ```
 

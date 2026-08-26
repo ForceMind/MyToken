@@ -13,6 +13,7 @@ import {
 import { openAiError } from "@mytoken/openai-compat";
 
 import type { ApiKeyStore } from "./app.js";
+import { linuxUsernamePattern, type CodexImportService } from "./codex-import-service.js";
 import type { ManagedProviderInput, ManagedProviderView } from "./provider-management-service.js";
 import { validateIpAllowlist } from "./request-policy.js";
 import type { RequestPolicyManager } from "./request-policy.js";
@@ -61,6 +62,7 @@ export interface RegisterAdminRoutesOptions {
     list(): Promise<readonly ManagedProviderView[]>;
     upsert(input: ManagedProviderInput): Promise<ManagedProviderView>;
   };
+  codexImport?: CodexImportService;
 }
 
 const setupSchema = z
@@ -109,6 +111,8 @@ const providerInputSchema = z
     apiKey: z.string().min(8).max(8192).optional(),
   })
   .strict();
+
+const codexImportSchema = z.object({ sourceUser: z.string().min(1).max(64) }).strict();
 
 export function registerAdminRoutes(
   app: FastifyInstance,
@@ -393,6 +397,47 @@ export function registerAdminRoutes(
             400,
             "Provider configuration could not be applied",
             "provider_config_failed",
+          );
+        }
+      },
+    );
+  }
+
+  const codexImport = options.codexImport;
+  if (codexImport) {
+    app.get("/api/admin/codex/import", async (request, reply) => {
+      noStore(reply);
+      const session = authenticateAdmin(request, reply, options, cookieName);
+      if (!session) return;
+      return { status: await codexImport.readStatus() };
+    });
+    app.post(
+      "/api/admin/codex/import",
+      { config: { rateLimit: { max: 3, timeWindow: "15 minutes" } } },
+      async (request, reply) => {
+        noStore(reply);
+        const session = authenticateAdmin(request, reply, options, cookieName, true);
+        if (!session) return;
+        if (!sameOrigin(request)) {
+          return adminError(reply, 403, "Codex import origin was rejected", "invalid_origin");
+        }
+        const parsed = codexImportSchema.safeParse(request.body);
+        if (
+          !parsed.success ||
+          !linuxUsernamePattern.test(parsed.data.sourceUser) ||
+          parsed.data.sourceUser === "mytoken-codex"
+        ) {
+          return adminError(reply, 400, "Invalid Linux source user", "invalid_linux_user");
+        }
+        try {
+          const requested = await codexImport.requestImport(parsed.data.sourceUser);
+          return reply.code(202).send({ requested });
+        } catch {
+          return adminError(
+            reply,
+            409,
+            "Codex import is already pending or running",
+            "codex_import_in_progress",
           );
         }
       },

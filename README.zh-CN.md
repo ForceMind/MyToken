@@ -33,7 +33,7 @@ MyToken Gateway 是部署在可信 Linux 服务器上的个人私有 AI 模型�
 使用发布 Tag，适合可重复部署：
 
 ```bash
-sudo git clone --branch v0.1.0-preview.8 --depth 1 \
+sudo git clone --branch v0.1.0-preview.9 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -71,7 +71,10 @@ sudo mytokenctl bootstrap-token
 ```bash
 sudo mytokenctl codex-status
 sudo mytokenctl codex-login
+sudo mytokenctl codex-import root
 ```
+
+管理台也可以从指定 Linux 用户默认的 `~/.codex` 导入文件型登录。受限 root Helper 只把 `auth.json` 复制到隔离的服务目录，并校验所有者、路径、大小和 `codex login status`；API 和网页不会收到凭据内容。使用系统 Keyring 的登录仍需设备码登录。
 
 ## 添加 Claude、DeepSeek 或其他 Provider
 
@@ -85,12 +88,12 @@ Codex 为了兼容现有客户端继续使用裸模型 ID；Claude 使用 `anthr
 
 ## 更新
 
-安装 preview.8 后，管理台“系统 → 系统更新”会直接发现并安装最新的不可变 GitHub Tag，不再依赖 npm。首次从旧版本升级到 preview.8 请执行：
+安装 preview.8 或更新版本后，管理台“系统 → 系统更新”会直接发现并安装最新的 GitHub 发布 Tag，不再依赖 npm。首次从旧版本升级到当前预览版请执行：
 
 ```bash
 cd /srv/mytoken-src
 sudo git fetch --force --tags origin
-sudo git checkout --detach v0.1.0-preview.8
+sudo git checkout --detach v0.1.0-preview.9
 sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 

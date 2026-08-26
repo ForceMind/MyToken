@@ -1,0 +1,209 @@
+#!/bin/sh
+set -eu
+
+request_path=/var/lib/mytoken/api/codex-import-request.json
+status_path=/var/lib/mytoken/codex-import/status.json
+lock_path=/var/lib/mytoken/codex-import/import.lock
+environment_file=/etc/mytoken/mytoken.env
+max_auth_bytes=1048576
+
+mkdir -p /var/lib/mytoken/codex-import
+chown root:mytoken-api /var/lib/mytoken/codex-import
+chmod 0750 /var/lib/mytoken/codex-import
+exec 9>"$lock_path"
+if ! flock -n 9; then exit 0; fi
+if [ ! -f "$request_path" ]; then exit 0; fi
+
+source_user=""
+failure_reported=false
+write_status() {
+  status="$1"
+  code="$2"
+  message="$3"
+  now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  temporary="${status_path}.tmp.$$"
+  umask 077
+  SOURCE_USER="$source_user" STATUS="$status" CODE="$code" MESSAGE="$message" NOW="$now" \
+    node -e '
+      const fs = require("node:fs");
+      const status = process.env.STATUS;
+      const now = process.env.NOW;
+      const body = {
+        status,
+        sourceUser: process.env.SOURCE_USER || null,
+        code: process.env.CODE || null,
+        requestedAt: null,
+        startedAt: status === "running" ? now : null,
+        finishedAt: status === "success" || status === "failed" ? now : null,
+        message: (process.env.MESSAGE || "").slice(0, 512) || null,
+      };
+      fs.writeFileSync(process.argv[1], JSON.stringify(body) + "\n", { mode: 0o640 });
+    ' "$temporary"
+  chown root:mytoken-api "$temporary"
+  chmod 0640 "$temporary"
+  mv -f "$temporary" "$status_path"
+}
+
+fail() {
+  failure_reported=true
+  write_status failed "$1" "$2"
+  exit 1
+}
+
+if ! source_user="$(REQUEST_PATH="$request_path" node -e '
+  const fs = require("node:fs");
+  const value = JSON.parse(fs.readFileSync(process.env.REQUEST_PATH, "utf8"));
+  if (!value || value.source !== "admin" ||
+      typeof value.sourceUser !== "string" ||
+      !/^[a-z_][a-z0-9_.-]{0,63}$/.test(value.sourceUser) ||
+      value.sourceUser === "mytoken-codex") process.exit(2);
+  process.stdout.write(value.sourceUser);
+')"; then
+  rm -f -- "$request_path"
+  fail invalid_request "Codex import request is invalid"
+fi
+rm -f -- "$request_path"
+write_status running "" "Checking the existing Linux Codex login"
+
+passwd_entry="$(getent passwd "$source_user" || true)"
+if [ -z "$passwd_entry" ]; then fail linux_user_not_found "Linux source user was not found"; fi
+source_uid="$(printf '%s' "$passwd_entry" | cut -d: -f3)"
+source_home="$(printf '%s' "$passwd_entry" | cut -d: -f6)"
+case "$source_home" in
+  /*) ;;
+  *) fail invalid_source_home "Linux source home is invalid" ;;
+esac
+if [ "$source_home" = "/" ]; then fail invalid_source_home "Linux source home is unsafe"; fi
+
+codex_bin="$(sed -n 's/^MYTOKEN_CODEX_BIN=//p' "$environment_file" | head -n 1)"
+codex_home="$(sed -n 's/^MYTOKEN_CODEX_HOME=//p' "$environment_file" | head -n 1)"
+worker_socket="$(sed -n 's/^MYTOKEN_WORKER_SOCKET=//p' "$environment_file" | head -n 1)"
+if [ -z "$codex_bin" ] || [ ! -x "$codex_bin" ]; then
+  fail codex_binary_unavailable "Configured Codex CLI is unavailable"
+fi
+case "$codex_home" in
+  /var/lib/mytoken/codex) ;;
+  *) fail invalid_destination_home "MyToken Codex home is not the protected service home" ;;
+esac
+if [ "$worker_socket" != "/run/mytoken/worker.sock" ]; then
+  fail invalid_worker_socket "MyToken Worker socket is not the protected deployment socket"
+fi
+
+source_codex_home="$source_home/.codex"
+source_auth="$source_codex_home/auth.json"
+if [ -L "$source_codex_home" ] || [ ! -f "$source_auth" ] || [ -L "$source_auth" ]; then
+  fail credential_store_not_importable "No safely importable auth.json was found; use device login"
+fi
+source_codex_real="$(readlink -f -- "$source_codex_home")"
+source_auth_real="$(readlink -f -- "$source_auth")"
+if [ "$source_auth_real" != "$source_codex_real/auth.json" ]; then
+  fail unsafe_credential_path "Codex credential path is unsafe"
+fi
+install -d -o mytoken-codex -g mytoken-codex -m 0700 "$codex_home"
+destination_auth="$codex_home/auth.json"
+staged_auth="$codex_home/.auth.import.$(openssl rand -hex 16)"
+backup_auth=""
+account_response=""
+destination_changed=false
+api_was_active=false
+worker_was_active=false
+systemctl is-active --quiet mytoken-api.service && api_was_active=true
+systemctl is-active --quiet mytoken-worker.service && worker_was_active=true
+
+cleanup() {
+  exit_status=$?
+  set +e
+  if [ "$exit_status" -ne 0 ] && [ "$destination_changed" = "true" ]; then
+    systemctl stop mytoken-api.service mytoken-worker.service >/dev/null 2>&1
+    if [ -n "$backup_auth" ] && [ -f "$backup_auth" ]; then
+      mv -f "$backup_auth" "$destination_auth"
+    else
+      rm -f -- "$destination_auth"
+    fi
+  fi
+  rm -f -- "$staged_auth"
+  if [ -n "$account_response" ]; then rm -f -- "$account_response"; fi
+  if [ -n "$backup_auth" ]; then rm -f -- "$backup_auth"; fi
+  if [ "$worker_was_active" = "true" ]; then systemctl start mytoken-worker.service; fi
+  if [ "$api_was_active" = "true" ]; then systemctl start mytoken-api.service; fi
+  if [ "$exit_status" -ne 0 ] && [ "$failure_reported" != "true" ]; then
+    write_status failed import_failed "Codex credential import failed and the previous service credential was restored"
+  fi
+  exit "$exit_status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if ! node /opt/mytoken/deploy/scripts/copy-codex-auth.mjs \
+  "$source_auth" "$staged_auth" "$source_uid" "$max_auth_bytes"; then
+  fail credential_validation_failed "Codex credential file failed guarded copy validation"
+fi
+chown mytoken-codex:mytoken-codex "$staged_auth"
+chmod 0600 "$staged_auth"
+if [ "$api_was_active" = "true" ]; then systemctl stop mytoken-api.service; fi
+if [ "$worker_was_active" = "true" ]; then systemctl stop mytoken-worker.service; fi
+if [ -f "$destination_auth" ]; then
+  backup_auth="$(mktemp "$codex_home/.auth.backup.XXXXXX")"
+  cp --preserve=mode,ownership,timestamps "$destination_auth" "$backup_auth"
+fi
+mv -f "$staged_auth" "$destination_auth"
+chown mytoken-codex:mytoken-codex "$destination_auth"
+chmod 0600 "$destination_auth"
+destination_changed=true
+
+if ! runuser -u mytoken-codex -- env \
+  HOME="$codex_home" CODEX_HOME="$codex_home" \
+  PATH=/usr/local/bin:/usr/bin:/bin \
+  "$codex_bin" login status >/dev/null 2>&1; then
+  fail imported_login_invalid "Imported credentials did not pass Codex login status"
+fi
+
+if [ "$worker_was_active" = "true" ]; then systemctl start mytoken-worker.service; fi
+if [ "$worker_was_active" = "true" ]; then
+  account_response="$(mktemp /var/lib/mytoken/codex-import/account.XXXXXX)"
+  account_ready=false
+  attempt=1
+  while [ "$attempt" -le 30 ]; do
+    if curl --fail --silent --max-time 2 --unix-socket "$worker_socket" \
+      http://localhost/internal/account -o "$account_response" && \
+      [ "$(wc -c < "$account_response")" -le 65536 ] && \
+      ACCOUNT_RESPONSE="$account_response" node -e '
+        const fs = require("node:fs");
+        const value = JSON.parse(fs.readFileSync(process.env.ACCOUNT_RESPONSE, "utf8"));
+        if (!value || typeof value.account !== "object" || value.account === null) process.exit(1);
+      ' >/dev/null 2>&1; then
+      account_ready=true
+      break
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+  rm -f -- "$account_response"
+  account_response=""
+  if [ "$account_ready" != "true" ]; then
+    fail imported_account_unavailable "Imported Codex account did not become available in the Worker"
+  fi
+fi
+if [ "$api_was_active" = "true" ]; then systemctl start mytoken-api.service; fi
+if [ "$api_was_active" = "true" ]; then
+  health_ok=false
+  attempt=1
+  while [ "$attempt" -le 30 ]; do
+    if curl --fail --silent http://127.0.0.1:8080/healthz >/dev/null 2>&1; then
+      health_ok=true
+      break
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+  if [ "$health_ok" != "true" ]; then
+    fail service_restart_failed "MyToken did not become healthy after Codex credential import"
+  fi
+fi
+destination_changed=false
+if [ -n "$backup_auth" ]; then rm -f -- "$backup_auth"; backup_auth=""; fi
+worker_was_active=false
+api_was_active=false
+write_status success "" "Existing Linux Codex login was imported into the isolated MyToken service home"

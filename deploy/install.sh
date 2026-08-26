@@ -28,7 +28,8 @@ require_command() {
 }
 
 for command_name in node npm openssl rsync curl systemctl systemd-tmpfiles install runuser \
-  groupadd useradd usermod getent id sort head sed grep awk mktemp chown chmod cp mv; do
+  groupadd useradd usermod getent id sort head sed grep awk mktemp chown chmod cp mv \
+  readlink stat cut flock timeout tail wc date; do
   require_command "$command_name"
 done
 
@@ -74,12 +75,17 @@ cleanup() {
   if [ "$exit_status" -ne 0 ] && [ "${transaction_active:-false}" = "true" ]; then
     printf '%s\n' "Deployment failed; restoring previous runtime and environment." >&2
     set +e
-    systemctl stop mytoken-api.service mytoken-worker.service mytoken-update.path >/dev/null 2>&1
+    systemctl stop mytoken-api.service mytoken-worker.service \
+      mytoken-update.path mytoken-codex-import.path >/dev/null 2>&1
     if [ -n "${runtime_backup_dir:-}" ]; then
       rsync -a --delete "$runtime_backup_dir/" "$install_dir/"
-      for unit in mytoken-worker.service mytoken-api.service mytoken-update.service mytoken-update.path; do
+      for unit in mytoken-worker.service mytoken-api.service \
+        mytoken-update.service mytoken-update.path \
+        mytoken-codex-import.service mytoken-codex-import.path; do
         if [ -f "$install_dir/deploy/systemd/$unit" ]; then
           install -m 0644 "$install_dir/deploy/systemd/$unit" "/etc/systemd/system/$unit"
+        else
+          rm -f -- "/etc/systemd/system/$unit"
         fi
       done
       if [ -f "$install_dir/deploy/bin/mytokenctl" ]; then
@@ -88,6 +94,13 @@ cleanup() {
       if [ -f "$install_dir/deploy/bin/mytoken-update-runner" ]; then
         install -d -m 0755 /usr/local/libexec
         install -m 0755 "$install_dir/deploy/bin/mytoken-update-runner" /usr/local/libexec/mytoken-update-runner
+      fi
+      if [ -f "$install_dir/deploy/bin/mytoken-codex-import-runner" ]; then
+        install -d -m 0755 /usr/local/libexec
+        install -m 0755 "$install_dir/deploy/bin/mytoken-codex-import-runner" \
+          /usr/local/libexec/mytoken-codex-import-runner
+      else
+        rm -f -- /usr/local/libexec/mytoken-codex-import-runner
       fi
     fi
     if [ -n "${environment_backup_file:-}" ] && [ -s "$environment_backup_file" ]; then
@@ -111,8 +124,16 @@ cleanup() {
     else
       systemctl disable mytoken-update.path >/dev/null 2>&1
     fi
+    if [ "${codex_import_path_was_enabled:-false}" = "true" ]; then
+      systemctl enable mytoken-codex-import.path >/dev/null 2>&1
+    else
+      systemctl disable mytoken-codex-import.path >/dev/null 2>&1
+    fi
     if [ "${update_path_was_active:-false}" = "true" ]; then
       systemctl start mytoken-update.path
+    fi
+    if [ "${codex_import_path_was_active:-false}" = "true" ]; then
+      systemctl start mytoken-codex-import.path
     fi
     if [ "${worker_was_active:-false}" = "true" ]; then systemctl start mytoken-worker.service; fi
     if [ "${api_was_active:-false}" = "true" ]; then systemctl start mytoken-api.service; fi
@@ -293,9 +314,11 @@ transaction_active=false
 api_was_active=false
 worker_was_active=false
 update_path_was_active=false
+codex_import_path_was_active=false
 api_was_enabled=false
 worker_was_enabled=false
 update_path_was_enabled=false
+codex_import_path_was_enabled=false
 if [ "$environment_preexisting" = "true" ]; then
   environment_backup_file="$(mktemp /var/tmp/mytoken-env-backup.XXXXXX)"
   cp --preserve=mode,ownership,timestamps "$environment_file" "$environment_backup_file"
@@ -307,9 +330,11 @@ fi
 systemctl is-active --quiet mytoken-api.service && api_was_active=true
 systemctl is-active --quiet mytoken-worker.service && worker_was_active=true
 systemctl is-active --quiet mytoken-update.path && update_path_was_active=true
+systemctl is-active --quiet mytoken-codex-import.path && codex_import_path_was_active=true
 systemctl is-enabled --quiet mytoken-api.service && api_was_enabled=true
 systemctl is-enabled --quiet mytoken-worker.service && worker_was_enabled=true
 systemctl is-enabled --quiet mytoken-update.path && update_path_was_enabled=true
+systemctl is-enabled --quiet mytoken-codex-import.path && codex_import_path_was_enabled=true
 transaction_active=true
 
 # Release-derived values must follow the deployed runtime instead of staying
@@ -375,14 +400,21 @@ install -m 0644 "$install_dir/deploy/systemd/mytoken-worker.service" /etc/system
 install -m 0644 "$install_dir/deploy/systemd/mytoken-api.service" /etc/systemd/system/
 install -m 0644 "$install_dir/deploy/systemd/mytoken-update.service" /etc/systemd/system/
 install -m 0644 "$install_dir/deploy/systemd/mytoken-update.path" /etc/systemd/system/
+install -m 0644 "$install_dir/deploy/systemd/mytoken-codex-import.service" /etc/systemd/system/
+install -m 0644 "$install_dir/deploy/systemd/mytoken-codex-import.path" /etc/systemd/system/
 install -m 0755 "$install_dir/deploy/bin/mytokenctl" /usr/local/sbin/mytokenctl
 install -d -o root -g root -m 0755 /usr/local/libexec
 install -o root -g root -m 0755 \
   "$install_dir/deploy/bin/mytoken-update-runner" /usr/local/libexec/mytoken-update-runner
+install -o root -g root -m 0755 \
+  "$install_dir/deploy/bin/mytoken-codex-import-runner" \
+  /usr/local/libexec/mytoken-codex-import-runner
 
 systemctl daemon-reload
-systemctl enable mytoken-worker.service mytoken-api.service mytoken-update.path >/dev/null
+systemctl enable mytoken-worker.service mytoken-api.service \
+  mytoken-update.path mytoken-codex-import.path >/dev/null
 systemctl restart mytoken-update.path
+systemctl restart mytoken-codex-import.path
 systemctl restart mytoken-worker.service
 systemctl restart mytoken-api.service
 

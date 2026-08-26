@@ -32,6 +32,8 @@ public Responses --> API router
                         +--> DeepSeek Chat / other Chat or Responses API
 ```
 
+An optional root-owned `mytoken-codex-import` oneshot is activated only by an authenticated administrator request. It can read a selected Linux user's default Codex credential file, but it copies the file opaquely into the isolated Worker home and never exposes its contents to `mytoken-api`.
+
 External model ids are canonical `provider/model` strings. Existing bare model ids remain a Codex compatibility alias.
 
 ## Dependency direction

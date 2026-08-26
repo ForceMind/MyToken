@@ -1,6 +1,6 @@
 {
   "name": "mytoken-gateway",
-  "version": "0.1.0-preview.8",
+  "version": "0.1.0-preview.9",
   "description": "Installer and operations bootstrap for the self-hosted MyToken AI model gateway",
   "license": "Apache-2.0",
   "type": "module",

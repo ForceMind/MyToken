@@ -289,8 +289,26 @@ function Overview(): ReactNode {
 function CodexPage(): ReactNode {
   const queryClient = useQueryClient();
   const [login, setLogin] = useState<DeviceLogin | null>(null);
+  const [importUser, setImportUser] = useState("root");
+  const [importRequested, setImportRequested] = useState(false);
   const [error, setError] = useState("");
   const status = useQuery({ queryKey: ["codex"], queryFn: api.codex, refetchInterval: 2_000 });
+  const importStatus = useQuery({
+    queryKey: ["codex-import"],
+    queryFn: api.codexImportStatus,
+    refetchInterval: 2_000,
+    retry: false,
+    enabled: status.data?.account.connected !== true,
+  });
+  const startImport = useMutation({
+    mutationFn: api.startCodexImport,
+    onSuccess: async () => {
+      setError("");
+      setImportRequested(true);
+      await queryClient.invalidateQueries({ queryKey: ["codex-import"] });
+    },
+    onError: (value) => setError(messageOf(value)),
+  });
   const start = useMutation({
     mutationFn: api.startCodexLogin,
     onSuccess: (value) => {
@@ -316,6 +334,17 @@ function CodexPage(): ReactNode {
   useEffect(() => {
     if (account?.connected) setLogin(null);
   }, [account?.connected]);
+  useEffect(() => {
+    const importState = importStatus.data?.status.status;
+    if (importState === "success" || importState === "failed") setImportRequested(false);
+    if (importState === "success") {
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["codex"] }),
+        queryClient.invalidateQueries({ queryKey: ["providers"] }),
+        queryClient.invalidateQueries({ queryKey: ["ready"] }),
+      ]);
+    }
+  }, [importStatus.data?.status.status, queryClient]);
 
   function confirmDisconnect(): void {
     if (window.confirm("确认退出服务器专用 Codex 账号？退出后所有网关 Key 都会暂时无法调用。")) {
@@ -375,6 +404,60 @@ function CodexPage(): ReactNode {
           </div>
         </Panel>
       )}
+      {!account?.connected && (
+        <Panel title="导入 Linux 已有 Codex 登录">
+          <p className="text-sm leading-6 text-slate-300">
+            检测指定 Linux 用户默认 <code>~/.codex</code> 中的登录，只把文件型认证凭据复制到 MyToken
+            专用目录；不会复制配置、历史或会话，也不会修改源用户文件。
+          </p>
+          <div className="mt-4 max-w-md">
+            <Field
+              name="codexImportUser"
+              label="Linux 用户名"
+              value={importUser}
+              pattern="[a-z_][a-z0-9_.-]{0,63}"
+              onChange={(event) => setImportUser(event.currentTarget.value)}
+            />
+          </div>
+          {importStatus.data?.status.message && (
+            <p className="mt-3 text-sm text-slate-400">
+              {codexImportMessage(importStatus.data.status.code, importStatus.data.status.message)}
+            </p>
+          )}
+          {importStatus.isError && (
+            <FormError message={`无法读取导入状态：${messageOf(importStatus.error)}`} />
+          )}
+          <div className="mt-4">
+            <Button
+              loading={
+                startImport.isPending ||
+                importRequested ||
+                importStatus.data?.status.status === "pending" ||
+                importStatus.data?.status.status === "running"
+              }
+              onClick={() => {
+                const sourceUser = importUser.trim();
+                if (!/^[a-z_][a-z0-9_.-]{0,63}$/u.test(sourceUser)) {
+                  setError("请输入有效的 Linux 用户名");
+                  return;
+                }
+                if (
+                  window.confirm(
+                    `确认从 Linux 用户 ${sourceUser} 的默认 Codex Home 导入认证副本？源用户文件不会被修改。`,
+                  )
+                ) {
+                  startImport.mutate(sourceUser);
+                }
+              }}
+            >
+              检测并导入已有登录
+            </Button>
+          </div>
+          <p className="mt-3 text-xs text-amber-300">
+            如果该登录保存在系统 Keyring 而不是 auth.json，导入会安全失败，请改用上方设备码登录。
+          </p>
+        </Panel>
+      )}
       <Panel title="Codex 额度窗口">
         {status.data?.rateLimits.available ? (
           <div className="grid gap-4 md:grid-cols-2">
@@ -427,6 +510,21 @@ function CodexPage(): ReactNode {
       </Panel>
     </Page>
   );
+}
+
+function codexImportMessage(code: string | null, fallback: string): string {
+  const messages: Record<string, string> = {
+    linux_user_not_found: "找不到该 Linux 用户。",
+    credential_store_not_importable:
+      "没有找到可安全导入的 auth.json；该用户可能未登录或使用了系统 Keyring，请使用设备码登录。",
+    credential_owner_mismatch: "认证文件所有者与所选 Linux 用户不一致，已拒绝导入。",
+    credential_validation_failed: "认证文件未通过防符号链接、所有者或大小校验，已拒绝导入。",
+    unsafe_credential_path: "认证文件路径不安全，已拒绝导入。",
+    imported_login_invalid: "认证副本未通过 Codex 登录验证，原服务凭据已恢复。",
+    imported_account_unavailable: "Worker 无法读取导入后的 Codex 账号，原服务凭据已恢复。",
+    service_restart_failed: "导入后服务未能恢复健康，原服务凭据已恢复。",
+  };
+  return code ? (messages[code] ?? fallback) : fallback;
 }
 
 function KeysPage({ onUseKey }: { onUseKey: (key: string) => void }): ReactNode {

@@ -42,9 +42,10 @@ The web console checks the dedicated service login before offering a login flow.
 
 ```bash
 sudo mytokenctl codex-login
+sudo mytokenctl codex-import root
 ```
 
-This login belongs to `mytoken-codex` and its dedicated `CODEX_HOME`. A login under root or another Unix user's home is intentionally not reused because that would break the credential boundary.
+The service login belongs to `mytoken-codex` and its dedicated `CODEX_HOME`. `codex-import USER` is an explicit, one-time, opaque copy of a regular file-backed `auth.json`; it never points the Worker at the source user's home. Source path, owner, size and target login status are validated, and the previous service credential is restored if verification or restart fails. Because the source and service retain separate copies, either side may require a fresh login if an upstream refresh policy invalidates duplicated credentials.
 
 External model providers:
 
@@ -107,7 +108,7 @@ journalctl -u mytoken-update.service
 cd /srv/mytoken-src
 git status --short --branch
 git fetch --force --tags origin
-git checkout --detach v0.1.0-preview.8
+git checkout --detach v0.1.0-preview.9
 sudo mytokenctl deploy /srv/mytoken-src
 ```
 

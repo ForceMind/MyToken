@@ -72,6 +72,12 @@ describe("administrator API", () => {
       apiKeyConfigured: true,
       status: null,
     }));
+    const requestCodexImport = vi.fn(async (sourceUser: string) => ({
+      id: "import-request",
+      sourceUser,
+      requestedAt: "2026-08-26T00:00:00Z",
+      source: "admin" as const,
+    }));
     const app = await createApiApp({
       backend,
       keyStore,
@@ -84,6 +90,20 @@ describe("administrator API", () => {
       providerManagement: {
         list: async () => [],
         upsert: upsertProvider,
+      },
+      codexImport: {
+        requestPath: "/tmp/test-codex-import-request.json",
+        statusPath: "/tmp/test-codex-import-status.json",
+        readStatus: async () => ({
+          status: "idle" as const,
+          sourceUser: null,
+          code: null,
+          requestedAt: null,
+          startedAt: null,
+          finishedAt: null,
+          message: null,
+        }),
+        requestImport: requestCodexImport,
       },
       cookieSecure: false,
     });
@@ -246,6 +266,20 @@ describe("administrator API", () => {
     expect(upsertProvider).toHaveBeenCalledWith(
       expect.objectContaining({ id: "deepseek", protocol: "openai-chat" }),
     );
+
+    const importedCodex = await app.inject({
+      method: "POST",
+      url: "/api/admin/codex/import",
+      headers: {
+        host: "mytoken.test",
+        origin: "http://mytoken.test",
+        cookie: sessionCookie,
+        "x-csrf-token": loginBody.csrfToken,
+      },
+      payload: { sourceUser: "root" },
+    });
+    expect(importedCodex.statusCode).toBe(202);
+    expect(requestCodexImport).toHaveBeenCalledWith("root");
 
     const logout = await app.inject({
       method: "POST",

@@ -11,7 +11,7 @@ Use a Linux server with systemd, Node.js 22.13 or newer, npm, and root/sudo acce
 Pinned release:
 
 ```bash
-sudo git clone --branch v0.1.0-preview.8 --depth 1 \
+sudo git clone --branch v0.1.0-preview.9 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -51,7 +51,10 @@ Codex login:
 ```bash
 sudo mytokenctl codex-status
 sudo mytokenctl codex-login
+sudo mytokenctl codex-import root
 ```
+
+Use **Codex connection → Import existing Linux login** or `codex-import USER` only for file-backed credentials in that user's default `~/.codex`. Keyring-backed or custom `CODEX_HOME` logins use the dedicated device flow instead.
 
 External providers can be configured directly under **System → Model Providers**. The page supports Claude, DeepSeek, and custom Anthropic Messages, OpenAI Chat Completions, or OpenAI Responses endpoints. Terminal configuration remains available:
 
@@ -68,7 +71,7 @@ After preview.8 is installed, use **System → System update**. The privileged u
 ```bash
 cd /srv/mytoken-src
 sudo git fetch --force --tags origin
-sudo git checkout --detach v0.1.0-preview.8
+sudo git checkout --detach v0.1.0-preview.9
 sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 

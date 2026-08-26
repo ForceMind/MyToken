@@ -22,7 +22,7 @@
 
 ### Credential extraction
 
-MyToken never reads or parses `auth.json`. The API process cannot access the Codex home. Logs use an allowlist and redact authorization, cookies, tokens, codes, and paths.
+The API process never reads `auth.json` and cannot access Linux user homes or the Codex service home. Only after an authenticated administrator explicitly requests import may a constrained root systemd helper copy an opaque, regular, owner-validated, size-bounded `auth.json` from a selected user's default `~/.codex` into the isolated service home. The helper never prints or parses credential contents, rejects symlinks, verifies the imported login through Codex, and restores the previous service credential on failure. Logs use an allowlist and redact authorization, cookies, tokens, codes, and paths.
 
 ### Arbitrary server execution
 

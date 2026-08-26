@@ -33,6 +33,7 @@ Commands:
   ready                   Query /readyz
   codex-status            Show Codex authentication method (never tokens)
   codex-login             Log in the dedicated server Codex identity in this terminal
+  codex-import USER       Import file-based Codex login from a Linux user
   provider-status         Show provider configuration without revealing keys
   provider-set ID [FILE]  Store or replace a provider API key, then restart API
   provider-reload         Restart API to reload provider configuration
@@ -95,6 +96,45 @@ case "$command_name" in
     set -e
     as_root systemctl start mytoken-worker.service mytoken-api.service
     exit "$login_status"
+    ;;
+  codex-import)
+    source_user="${2:-}"
+    case "$source_user" in
+      ""|mytoken-codex|*[!a-z0-9_.-]*)
+        printf '%s\n' "A valid Linux source user is required." >&2
+        exit 2
+        ;;
+    esac
+    case "$source_user" in
+      [a-z_]*) ;;
+      *) printf '%s\n' "Linux source user must start with a lowercase letter or underscore." >&2; exit 2 ;;
+    esac
+    request_path=/var/lib/mytoken/api/codex-import-request.json
+    if as_root test -e "$request_path" || \
+      as_root systemctl is-active --quiet mytoken-codex-import.service; then
+      printf '%s\n' "A Codex import request is already pending." >&2
+      exit 1
+    fi
+    if ! as_root env SOURCE_USER="$source_user" REQUEST_PATH="$request_path" \
+      /usr/bin/env node -e '
+        const fs = require("node:fs");
+        const crypto = require("node:crypto");
+        const sourceUser = process.env.SOURCE_USER;
+        if (!/^[a-z_][a-z0-9_.-]{0,63}$/.test(sourceUser) || sourceUser === "mytoken-codex") process.exit(2);
+        const body = { id: crypto.randomBytes(16).toString("hex"), sourceUser, requestedAt: new Date().toISOString(), source: "admin" };
+        fs.writeFileSync(process.env.REQUEST_PATH, JSON.stringify(body), { flag: "wx", mode: 0o600 });
+      '; then
+      printf '%s\n' "Unable to create Codex import request." >&2
+      exit 1
+    fi
+    set +e
+    as_root systemctl start mytoken-codex-import.service
+    import_status=$?
+    set -e
+    if as_root test -r /var/lib/mytoken/codex-import/status.json; then
+      as_root cat /var/lib/mytoken/codex-import/status.json
+    fi
+    exit "$import_status"
     ;;
   provider-status)
     provider_config="$(env_value MYTOKEN_PROVIDERS_FILE)"

@@ -10,6 +10,7 @@ import {
 } from "@mytoken/database";
 
 import { createApiApp } from "./app.js";
+import { CodexImportService } from "./codex-import-service.js";
 import {
   AnthropicMessagesProviderBackend,
   OpenAIChatProviderBackend,
@@ -33,6 +34,7 @@ const policyManager = new RequestPolicyManager(requestLogRepository, {
 });
 const currentVersion = process.env.MYTOKEN_VERSION ?? "development";
 const systemUpdate = new SystemUpdateService({ currentVersion });
+const codexImport = new CodexImportService();
 const sessionSecret = await readSecret(requiredEnv("MYTOKEN_SESSION_SECRET_FILE"));
 const keyPepper = await readSecret(requiredEnv("MYTOKEN_KEY_PEPPER_FILE"));
 const adminAuth = new AdminAuthService(adminRepository, sessionSecret);
@@ -83,6 +85,7 @@ const app = await createApiApp({
   usageStore: requestLogRepository,
   policyManager,
   systemUpdate,
+  codexImport,
   providerManagement,
   version: currentVersion,
   keyPepper,

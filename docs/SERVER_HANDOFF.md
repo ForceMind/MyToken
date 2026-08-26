@@ -72,7 +72,7 @@ command -v codex
 
 The systemd worker uses `/usr/local/bin:/usr/bin:/bin`. If `command -v codex` reports a per-user path, install an administrator-approved copy or symlink at `/usr/local/bin/codex`, then set `MYTOKEN_CODEX_BIN=/usr/local/bin/codex`.
 
-Do not copy your development account's `~/.codex/auth.json` into the service home. MyToken performs a separate server-service login through its management page.
+Do not manually copy your development account's `~/.codex/auth.json` into the service home. Use the guarded management-page import or `sudo mytokenctl codex-import USER`; otherwise perform a separate server-service device login.
 
 ## 3. Verify and build the source tree
 
@@ -138,7 +138,7 @@ Create `/etc/mytoken/mytoken.env`:
 
 ```text
 NODE_ENV=production
-MYTOKEN_VERSION=0.1.0-preview.8
+MYTOKEN_VERSION=0.1.0-preview.9
 MYTOKEN_HOST=127.0.0.1
 MYTOKEN_PORT=8080
 MYTOKEN_WEB_ROOT=/opt/mytoken/apps/web/dist

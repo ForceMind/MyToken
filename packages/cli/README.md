@@ -27,7 +27,7 @@ The npm development channel is paused after preview.7. Use the GitHub tag below 
 ### Install from GitHub
 
 ```bash
-sudo git clone --branch v0.1.0-preview.8 --depth 1 \
+sudo git clone --branch v0.1.0-preview.9 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -49,7 +49,7 @@ After preview.8 is installed, **System → System update** updates directly from
 ```bash
 cd /srv/mytoken-src
 sudo git fetch --force --tags origin
-sudo git checkout --detach v0.1.0-preview.8
+sudo git checkout --detach v0.1.0-preview.9
 sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 
@@ -60,6 +60,7 @@ mytokenctl status
 mytokenctl doctor
 mytokenctl version-check
 mytokenctl codex-status
+sudo mytokenctl codex-import root
 sudo mytokenctl backup
 ```
 
@@ -90,7 +91,7 @@ npm 开发通道在 preview.7 后暂停，当前版本请使用下面的 GitHub 
 ### 通过 GitHub 安装
 
 ```bash
-sudo git clone --branch v0.1.0-preview.8 --depth 1 \
+sudo git clone --branch v0.1.0-preview.9 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -112,7 +113,7 @@ sudo mytokenctl bootstrap-token
 ```bash
 cd /srv/mytoken-src
 sudo git fetch --force --tags origin
-sudo git checkout --detach v0.1.0-preview.8
+sudo git checkout --detach v0.1.0-preview.9
 sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 
@@ -123,6 +124,7 @@ mytokenctl status
 mytokenctl doctor
 mytokenctl version-check
 mytokenctl codex-status
+sudo mytokenctl codex-import root
 sudo mytokenctl backup
 ```
 

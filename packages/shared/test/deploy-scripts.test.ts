@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -11,6 +11,7 @@ describe("deployment shell scripts", () => {
     "deploy/scripts/generate-secrets.sh",
     "deploy/bin/mytokenctl",
     "deploy/bin/mytoken-update-runner",
+    "deploy/bin/mytoken-codex-import-runner",
   ]) {
     it(`${script} has valid POSIX shell syntax`, () => {
       expect(() =>
@@ -109,6 +110,53 @@ describe("deployment shell scripts", () => {
         ],
       });
       expect(readFileSync(path.join(secrets, "deepseek"), "utf8")).toBe("deepseek-secret");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("installs a guarded root-only Codex credential importer", () => {
+    const installer = readFileSync(path.resolve("deploy/install.sh"), "utf8");
+    const runner = readFileSync(path.resolve("deploy/bin/mytoken-codex-import-runner"), "utf8");
+    const unit = readFileSync(path.resolve("deploy/systemd/mytoken-codex-import.service"), "utf8");
+    expect(installer).toContain("mytoken-codex-import.path");
+    expect(installer).toContain("mytoken-codex-import-runner");
+    expect(runner).toContain('source_auth="$source_codex_home/auth.json"');
+    expect(runner).toContain("copy-codex-auth.mjs");
+    expect(runner).toContain("runuser -u mytoken-codex");
+    expect(runner).not.toContain('cat "$source_auth"');
+    expect(unit).toContain("ProtectHome=read-only");
+    expect(unit).toContain("ReadWritePaths=/var/lib/mytoken /run/mytoken");
+
+    const directory = mkdtempSync(path.join(tmpdir(), "mytoken-codex-auth-copy-"));
+    try {
+      const source = path.join(directory, "auth.json");
+      const destination = path.join(directory, "copied.json");
+      writeFileSync(source, '{"auth":"opaque"}', { mode: 0o600 });
+      execFileSync(process.execPath, [
+        path.resolve("deploy/scripts/copy-codex-auth.mjs"),
+        source,
+        destination,
+        String(process.getuid?.() ?? 0),
+        "1048576",
+      ]);
+      expect(readFileSync(destination, "utf8")).toBe('{"auth":"opaque"}');
+
+      const symlink = path.join(directory, "auth-link.json");
+      symlinkSync(source, symlink);
+      expect(() =>
+        execFileSync(
+          process.execPath,
+          [
+            path.resolve("deploy/scripts/copy-codex-auth.mjs"),
+            symlink,
+            path.join(directory, "should-not-exist.json"),
+            String(process.getuid?.() ?? 0),
+            "1048576",
+          ],
+          { stdio: "pipe" },
+        ),
+      ).toThrow();
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

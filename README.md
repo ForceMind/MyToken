@@ -33,7 +33,7 @@ The installer supports OpenCloudOS/RHEL/Fedora and Debian/Ubuntu package tooling
 Release tag, recommended for repeatable installation:
 
 ```bash
-sudo git clone --branch v0.1.0-preview.8 --depth 1 \
+sudo git clone --branch v0.1.0-preview.9 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -71,7 +71,10 @@ Terminal login is also available:
 ```bash
 sudo mytokenctl codex-status
 sudo mytokenctl codex-login
+sudo mytokenctl codex-import root
 ```
+
+The console can also import a file-based login from a selected Linux user's default `~/.codex`. The guarded root helper copies only `auth.json` into the isolated service home, validates ownership/path/size and `codex login status`, and never returns credential contents to the API or browser. Keyring-backed logins still require device login.
 
 ## Add Claude, DeepSeek, or another provider
 
@@ -85,12 +88,12 @@ Model ids are exposed as bare ids for Codex, `anthropic/<model-id>` for Claude, 
 
 ## Update
 
-After preview.8 is installed, **System → System update** discovers and installs the latest immutable GitHub tag without npm. To install preview.8 over an older release for the first time, run:
+After preview.8 is installed, **System → System update** discovers and installs the latest GitHub release tag without npm. To install the current preview over an older release for the first time, run:
 
 ```bash
 cd /srv/mytoken-src
 sudo git fetch --force --tags origin
-sudo git checkout --detach v0.1.0-preview.8
+sudo git checkout --detach v0.1.0-preview.9
 sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 

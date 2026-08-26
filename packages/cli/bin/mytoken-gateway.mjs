@@ -126,6 +126,9 @@ function installPrerequisites() {
     "chmod",
     "cp",
     "mv",
+    "readlink",
+    "stat",
+    "date",
   ];
   const missing = required.filter((name) => !commandExists(name));
   if (missing.length === 0) return;

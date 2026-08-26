@@ -20,6 +20,8 @@
       codex app-server
 ```
 
+可选的 root `mytoken-codex-import` oneshot 只会在管理员显式请求后启动。它可以读取指定 Linux 用户默认的 Codex 凭据文件，但只会不解析内容地复制到隔离 Worker Home，不会把内容交给 `mytoken-api`。
+
 ## 依赖方向
 
 - Shared Package 只包含数据契约和纯工具。

@@ -21,7 +21,7 @@
 
 ## 主要控制
 
-- MyToken 不读取或解析 `auth.json`；API 用户不能读取 Codex Home。
+- API 不读取 `auth.json`，也不能访问 Linux 用户 Home 或 Codex 服务 Home。只有管理员显式请求时，受限 root systemd Helper 才能从指定用户默认 `~/.codex` 复制不解析内容、非符号链接、所有者匹配且大小受限的 `auth.json` 到隔离服务目录；导入后由 Codex 验证，失败会恢复旧凭据。
 - 完整 MyToken Key 不进入数据库；密码使用 Argon2id；Session 只保存摘要。
 - Key 可以限制模型、IP/CIDR、RPM、每日请求、并发、请求余额和 Token 预算。
 - 请求、结果、队列、SSE、工具和时间均有界。

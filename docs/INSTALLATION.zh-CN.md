@@ -11,7 +11,7 @@
 使用固定发布版本：
 
 ```bash
-sudo git clone --branch v0.1.0-preview.8 --depth 1 \
+sudo git clone --branch v0.1.0-preview.9 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -51,7 +51,10 @@ Codex 登录：
 ```bash
 sudo mytokenctl codex-status
 sudo mytokenctl codex-login
+sudo mytokenctl codex-import root
 ```
+
+“Codex 连接 → 导入 Linux 已有登录”及 `codex-import USER` 只支持该用户默认 `~/.codex` 中的文件型凭据。系统 Keyring 或自定义 `CODEX_HOME` 登录仍应使用专用设备码流程。
 
 外部 Provider 可直接在“系统 → 模型 Providers”配置。页面支持 Claude、DeepSeek，以及自定义 Anthropic Messages、OpenAI Chat Completions 或 OpenAI Responses 服务。终端配置仍然可用：
 
@@ -68,7 +71,7 @@ sudo mytokenctl provider-status
 ```bash
 cd /srv/mytoken-src
 sudo git fetch --force --tags origin
-sudo git checkout --detach v0.1.0-preview.8
+sudo git checkout --detach v0.1.0-preview.9
 sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 

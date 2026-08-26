@@ -11,6 +11,7 @@ import {
 } from "../packages/database/src/index.js";
 import { createGatewayResponse } from "../packages/openai-compat/src/index.js";
 import { createApiApp, type GatewayBackend } from "../apps/api/src/app.js";
+import type { CodexImportStatus } from "../apps/api/src/codex-import-service.js";
 import type { CodexAdminBackend } from "../apps/api/src/admin-routes.js";
 import { RequestPolicyManager } from "../apps/api/src/request-policy.js";
 import type {
@@ -51,6 +52,15 @@ let managedProviders: ManagedProviderView[] = [
     status: "api_key_file_missing",
   },
 ];
+let codexImportStatus: CodexImportStatus = {
+  status: "idle",
+  sourceUser: null,
+  code: null,
+  requestedAt: null,
+  startedAt: null,
+  finishedAt: null,
+  message: null,
+};
 
 const backend: GatewayBackend & CodexAdminBackend = {
   isReady: () => true,
@@ -73,7 +83,7 @@ const backend: GatewayBackend & CodexAdminBackend = {
     ),
   account: () =>
     Promise.resolve({
-      account: { type: "chatgpt", email: "preview@example.com", planType: "plus" },
+      account: null,
       requiresOpenaiAuth: true,
     }),
   rateLimits: () =>
@@ -104,9 +114,9 @@ const backend: GatewayBackend & CodexAdminBackend = {
         name: "Codex",
         protocol: "codex-app-server",
         enabled: true,
-        ready: true,
+        ready: false,
         modelsCount: 1,
-        error: null,
+        error: "codex_not_authenticated",
       },
       ...managedProviders.map((provider) => ({
         id: provider.id,
@@ -147,6 +157,29 @@ const app = await createApiApp({
         configured,
       ];
       return Promise.resolve(configured);
+    },
+  },
+  codexImport: {
+    requestPath: "/tmp/mytoken-preview-codex-import-request.json",
+    statusPath: "/tmp/mytoken-preview-codex-import-status.json",
+    readStatus: () => Promise.resolve(codexImportStatus),
+    requestImport: (sourceUser: string) => {
+      const requestedAt = new Date().toISOString();
+      codexImportStatus = {
+        status: "failed",
+        sourceUser,
+        code: "credential_store_not_importable",
+        requestedAt,
+        startedAt: requestedAt,
+        finishedAt: requestedAt,
+        message: "Preview import simulation",
+      };
+      return Promise.resolve({
+        id: "preview-import",
+        sourceUser,
+        requestedAt,
+        source: "admin" as const,
+      });
     },
   },
   version: release.version,

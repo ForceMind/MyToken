@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for MyToken Codex credential import requests
+
+[Path]
+PathExists=/var/lib/mytoken/api/codex-import-request.json
+Unit=mytoken-codex-import.service
+
+[Install]
+WantedBy=multi-user.target

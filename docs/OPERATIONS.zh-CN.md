@@ -36,9 +36,10 @@ mytokenctl logs worker
 ```bash
 sudo mytokenctl codex-status
 sudo mytokenctl codex-login
+sudo mytokenctl codex-import root
 ```
 
-这里登录的是 `mytoken-codex` 专用 `CODEX_HOME`，不会复用 root 或普通 SSH 用户的 Codex Home。
+服务始终使用 `mytoken-codex` 专用 `CODEX_HOME`。`codex-import USER` 只是显式、一次性、不解析内容地复制普通文件型 `auth.json`，不会让 Worker 指向源用户 Home。Helper 会校验路径、所有者、大小和目标登录状态，失败时恢复旧服务凭据。源用户与服务保留两个副本；如果上游刷新策略使副本失效，任一侧可能需要重新登录。
 
 ## Provider
 
@@ -67,7 +68,7 @@ sudo mytokenctl backup
 ```bash
 cd /srv/mytoken-src
 sudo git fetch --force --tags origin
-sudo git checkout --detach v0.1.0-preview.8
+sudo git checkout --detach v0.1.0-preview.9
 sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 
