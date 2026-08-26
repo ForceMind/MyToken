@@ -14,11 +14,13 @@ import {
   Link2,
   LogOut,
   MessageSquare,
+  Moon,
   Plug,
   RefreshCw,
   ScrollText,
   Server,
   ShieldCheck,
+  Sun,
 } from "lucide-react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
@@ -30,6 +32,8 @@ import {
   type DeviceLogin,
   type GatewayRequestLog,
 } from "./api.js";
+
+declare const __MYTOKEN_VERSION__: string;
 
 export function App(): ReactNode {
   const setup = useQuery({ queryKey: ["setup"], queryFn: api.setupStatus });
@@ -144,6 +148,9 @@ function Console({ username }: { username: string }): ReactNode {
   ];
   return (
     <div className="min-h-screen bg-[var(--bg)] text-slate-100">
+      <div className="fixed right-5 top-5 z-40">
+        <ThemeToggle />
+      </div>
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-white/8 bg-[var(--surface)] p-5 md:block">
         <Brand />
         <nav className="mt-10 space-y-2">
@@ -996,6 +1003,9 @@ function AuthShell({
 }): ReactNode {
   return (
     <div className="grid min-h-screen place-items-center bg-[var(--bg)] p-5 text-slate-100">
+      <div className="fixed right-5 top-5 z-40">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-md">
         <Brand />
         <div className="mt-8 rounded-2xl border border-white/8 bg-[var(--surface)] p-7 shadow-2xl">
@@ -1008,6 +1018,43 @@ function AuthShell({
   );
 }
 
+type Theme = "light" | "dark";
+
+function ThemeToggle(): ReactNode {
+  const [theme, setTheme] = useState<Theme>(() => currentTheme());
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem("mytoken.theme", theme);
+    } catch {
+      // Theme persistence is optional when storage is unavailable.
+    }
+  }, [theme]);
+  const dark = theme === "dark";
+  return (
+    <button
+      type="button"
+      className="button-secondary h-10 w-10 p-0 shadow-sm"
+      aria-label={dark ? "切换到浅色模式" : "切换到深色模式"}
+      title={dark ? "浅色模式" : "深色模式"}
+      onClick={() => setTheme(dark ? "light" : "dark")}
+    >
+      {dark ? <Sun size={18} /> : <Moon size={18} />}
+    </button>
+  );
+}
+
+function currentTheme(): Theme {
+  if (typeof document !== "undefined" && document.documentElement.dataset.theme === "dark") {
+    return "dark";
+  }
+  try {
+    return localStorage.getItem("mytoken.theme") === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
 function Brand(): ReactNode {
   return (
     <div className="flex items-center gap-3">
@@ -1016,7 +1063,7 @@ function Brand(): ReactNode {
       </div>
       <div>
         <p className="font-semibold tracking-wide">MyToken</p>
-        <p className="text-xs text-slate-500">Personal Codex Gateway</p>
+        <p className="text-xs text-slate-500">Gateway · {__MYTOKEN_VERSION__}</p>
       </div>
     </div>
   );

@@ -6,6 +6,13 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./App.js";
 import "./styles.css";
 
+try {
+  document.documentElement.dataset.theme =
+    localStorage.getItem("mytoken.theme") === "dark" ? "dark" : "light";
+} catch {
+  document.documentElement.dataset.theme = "light";
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { retry: false, staleTime: 5_000 },

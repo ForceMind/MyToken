@@ -29,11 +29,12 @@
 - An idempotent one-click Linux installer preserves existing Secrets/config, backs up an existing database, rebuilds, installs, restarts, and health-checks the service.
 - `mytokenctl` provides service, log, health, Codex status, permission, database, backup, bootstrap, version, and redeploy operations.
 - The `mytoken-gateway@0.1.0-preview.1` npm bootstrap package packs to four audited files and installs/runs successfully from its tarball.
-- Source is prepared for `0.1.0-preview.4`; registry publication and the matching Git tag are still required before page-based updates can install it.
+- Source is prepared for `0.1.0-preview.5`; registry publication and the matching Git tag are still required before page-based updates can install it.
 - Per-Key model allowlists, IP/CIDR allowlists, RPM, daily limits, concurrency, request balance, token budget, usage summaries, source IP, request context, response context, and request-log administration are implemented.
 - Codex account detection now precedes login, logout requires confirmation in the console, and ChatGPT rate-limit plus account-usage data are normalized for display.
 - Gateway Codex threads are ephemeral so gateway calls do not enter the normal Codex conversation list.
 - The API can route canonical `provider/model` ids to Anthropic Messages, DeepSeek Responses, and additional configured OpenAI Responses-compatible providers. Provider keys remain in API-only secret files.
+- The management console defaults to a light theme and persists an explicit dark-mode preference locally.
 - The built console was exercised through the real Fastify static server in the in-app browser with no browser console errors; automated Playwright coverage remains pending.
 
 ## Not yet verified

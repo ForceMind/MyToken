@@ -15,6 +15,7 @@ MyToken Gateway 是部署在可信 Linux 服务器上的个人私有 AI 模型�
 - 每个 Key 独立配置模型、IP/CIDR、RPM、每日请求、并发、总请求余额和 Token 预算；
 - 记录 Key、IP、模型、延迟、Token、上下文、响应和错误；
 - 管理台支持 Codex 登录、额度、Key、Provider、测试聊天、请求记录和系统状态；
+- 管理台默认使用浅色主题，并支持持久化的深色模式切换；
 - 通过受限 systemd 更新器在页面中安全触发更新；
 - 网关使用临时 Codex Thread，不进入日常 Codex 对话列表。
 
@@ -42,7 +43,7 @@ npm 包只是一个很小的引导 CLI。它会解析与版本对应的不可变
 使用发布 Tag，适合可重复部署：
 
 ```bash
-sudo git clone --branch v0.1.0-preview.4 --depth 1 \
+sudo git clone --branch v0.1.0-preview.5 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh

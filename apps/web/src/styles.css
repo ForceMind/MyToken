@@ -1,8 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #07111f;
-  --surface: #0d1a2b;
+  --bg: #f4f7fb;
+  --surface: #ffffff;
+  --text: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --border: rgb(15 23 42 / 0.1);
+  --input-bg: #ffffff;
+  --code-bg: #eef2f7;
+  --hover: rgb(15 23 42 / 0.05);
+  --primary: #059669;
+  --primary-hover: #047857;
+  --primary-text: #ffffff;
+  --success: #047857;
+  --warning: #a16207;
+  --danger: #b91c1c;
   font-family:
     Inter,
     ui-sans-serif,
@@ -11,6 +24,25 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #07111f;
+  --surface: #0d1a2b;
+  --text: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border: rgb(255 255 255 / 0.08);
+  --input-bg: rgb(0 0 0 / 0.2);
+  --code-bg: rgb(0 0 0 / 0.3);
+  --hover: rgb(255 255 255 / 0.05);
+  --primary: #6ee7b7;
+  --primary-hover: #a7f3d0;
+  --primary-text: #062018;
+  --success: #6ee7b7;
+  --warning: #fde68a;
+  --danger: #fca5a5;
   color-scheme: dark;
 }
 
@@ -22,6 +54,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background: var(--bg);
+  color: var(--text);
 }
 button,
 input {
@@ -37,11 +70,11 @@ button:disabled {
 
 .input {
   width: 100%;
-  border: 1px solid rgb(255 255 255 / 0.1);
+  border: 1px solid var(--border);
   border-radius: 0.75rem;
-  background: rgb(0 0 0 / 0.2);
+  background: var(--input-bg);
   padding: 0.75rem 0.9rem;
-  color: #f1f5f9;
+  color: var(--text);
   outline: none;
 }
 .input:focus {
@@ -63,19 +96,20 @@ button:disabled {
   font-weight: 600;
 }
 .button-primary {
-  background: #6ee7b7;
-  color: #062018;
+  background: var(--primary);
+  color: var(--primary-text);
 }
 .button-primary:hover {
-  background: #a7f3d0;
+  background: var(--primary-hover);
 }
 .button-secondary {
-  background: rgb(255 255 255 / 0.08);
-  color: #e2e8f0;
+  border: 1px solid var(--border);
+  background: var(--hover);
+  color: var(--text-secondary);
 }
 .button-danger {
   background: rgb(248 113 113 / 0.16);
-  color: #fca5a5;
+  color: var(--danger);
 }
 
 .nav-item {
@@ -84,19 +118,57 @@ button:disabled {
   gap: 0.75rem;
   border-radius: 0.75rem;
   padding: 0.7rem 0.8rem;
-  color: #94a3b8;
+  color: var(--text-muted);
   text-decoration: none;
 }
 .nav-item:hover {
-  background: rgb(255 255 255 / 0.05);
-  color: white;
+  background: var(--hover);
+  color: var(--text);
 }
 .nav-item-active {
   background: rgb(52 211 153 / 0.1);
-  color: #6ee7b7;
+  color: var(--success);
 }
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 1.25rem;
+}
+
+/* Tailwind utility colors in the existing UI are normalized for the light
+   theme. Dark mode keeps their original palette. */
+:root:not([data-theme="dark"]) .text-slate-100,
+:root:not([data-theme="dark"]) .text-slate-200 {
+  color: var(--text) !important;
+}
+:root:not([data-theme="dark"]) .text-slate-300 {
+  color: var(--text-secondary) !important;
+}
+:root:not([data-theme="dark"]) .text-slate-400,
+:root:not([data-theme="dark"]) .text-slate-500 {
+  color: var(--text-muted) !important;
+}
+:root:not([data-theme="dark"]) .text-emerald-300 {
+  color: var(--success) !important;
+}
+:root:not([data-theme="dark"]) .text-amber-200,
+:root:not([data-theme="dark"]) .text-amber-300 {
+  color: var(--warning) !important;
+}
+:root:not([data-theme="dark"]) .text-red-200,
+:root:not([data-theme="dark"]) .text-red-300 {
+  color: var(--danger) !important;
+}
+:root:not([data-theme="dark"]) .border-white\/8 {
+  border-color: var(--border) !important;
+}
+:root:not([data-theme="dark"]) .bg-black\/25,
+:root:not([data-theme="dark"]) .bg-black\/30 {
+  background: var(--code-bg) !important;
+}
+:root:not([data-theme="dark"]) .hover\:bg-white\/5:hover {
+  background: var(--hover) !important;
+}
+:root:not([data-theme="dark"]) .hover\:text-white:hover {
+  color: var(--text) !important;
 }

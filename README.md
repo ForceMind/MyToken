@@ -15,6 +15,7 @@ MyToken Gateway is a private, single-administrator AI model gateway for a truste
 - per-key model, IP/CIDR, RPM, daily request, concurrency, request-balance, and token-budget controls;
 - request, IP, model, latency, token, context, response, and error logs;
 - a management console for Codex login, quotas, keys, providers, test chat, logs, and system status;
+- a light-by-default interface with a persistent dark-mode toggle;
 - protected browser-triggered updates through a constrained systemd updater;
 - ephemeral Codex gateway threads that do not appear in the normal Codex conversation list.
 
@@ -42,7 +43,7 @@ The npm package is a small bootstrap CLI. It resolves its matching immutable Git
 Release tag, recommended for repeatable installation:
 
 ```bash
-sudo git clone --branch v0.1.0-preview.4 --depth 1 \
+sudo git clone --branch v0.1.0-preview.5 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
