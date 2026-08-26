@@ -156,13 +156,13 @@ function installPrerequisites() {
   throw new Error(`Install these prerequisites manually: ${missing.join(", ")}`);
 }
 
-async function ensureSource(optionsValue) {
+async function ensureSource(optionsValue, verifyExisting = true) {
   if (existsSync(optionsValue.source)) {
     if (!existsSync(path.join(optionsValue.source, ".git"))) {
       throw new Error(`Source directory exists but is not a Git checkout: ${optionsValue.source}`);
     }
     console.log(`Using existing source checkout: ${optionsValue.source}`);
-    verifyDefaultRelease(optionsValue);
+    if (verifyExisting) verifyDefaultRelease(optionsValue);
     return;
   }
   await mkdir(path.dirname(optionsValue.source), { recursive: true });
@@ -172,7 +172,9 @@ async function ensureSource(optionsValue) {
 }
 
 async function updateSource(optionsValue) {
-  await ensureSource(optionsValue);
+  // An existing checkout is expected to point at the previous release. Verify
+  // origin and the target commit only after fetching and checking out the new tag.
+  await ensureSource(optionsValue, false);
   const status = capture("git", ["-C", optionsValue.source, "status", "--porcelain"]);
   if (status.trim()) {
     throw new Error(

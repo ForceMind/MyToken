@@ -118,7 +118,7 @@ if [ ! -e "$environment_file" ]; then
   environment_tmp="$(mktemp /etc/mytoken/mytoken.env.XXXXXX)"
   cat > "$environment_tmp" <<EOF
 NODE_ENV=production
-MYTOKEN_VERSION=0.1.0-preview.2
+MYTOKEN_VERSION=0.1.0-preview.3
 MYTOKEN_HOST=127.0.0.1
 MYTOKEN_PORT=8080
 MYTOKEN_WEB_ROOT=$install_dir/apps/web/dist

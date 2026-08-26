@@ -19,4 +19,15 @@ describe("published installer CLI", () => {
     expect(output).toContain("sudo npx --yes mytoken-gateway@preview install");
     expect(output).toContain(`v${packageJson.version}`);
   });
+
+  it("allows an existing previous-release checkout before verifying the fetched target", () => {
+    const source = readFileSync(path.resolve("packages/cli/bin/mytoken-gateway.mjs"), "utf8");
+    const updateStart = source.indexOf("async function updateSource");
+    const updateEnd = source.indexOf("function verifyDefaultRelease", updateStart);
+    const updateFunction = source.slice(updateStart, updateEnd);
+    expect(updateFunction).toContain("await ensureSource(optionsValue, false)");
+    expect(updateFunction.indexOf('checkout", "--detach", "FETCH_HEAD')).toBeLessThan(
+      updateFunction.indexOf("verifyDefaultRelease(optionsValue)"),
+    );
+  });
 });

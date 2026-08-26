@@ -3,7 +3,7 @@
 ## Package
 
 - Name: `mytoken-gateway`
-- Next preview version: `0.1.0-preview.2`
+- Next preview version: `0.1.0-preview.3`
 - Public install command: `sudo npx --yes mytoken-gateway@preview install`
 - Published contents: CLI, README, and Apache-2.0 license only
 - Default source ref: release Git tag matching the npm package version

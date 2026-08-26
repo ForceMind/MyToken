@@ -1,6 +1,6 @@
 {
   "name": "mytoken-gateway",
-  "version": "0.1.0-preview.2",
+  "version": "0.1.0-preview.3",
   "description": "Installer and operations bootstrap for the self-hosted MyToken Personal Codex Gateway",
   "license": "Apache-2.0",
   "type": "module",
