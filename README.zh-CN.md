@@ -43,7 +43,7 @@ npm 包只是一个很小的引导 CLI。它会解析与版本对应的不可变
 使用发布 Tag，适合可重复部署：
 
 ```bash
-sudo git clone --branch v0.1.0-preview.6 --depth 1 \
+sudo git clone --branch v0.1.0-preview.7 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -105,7 +105,7 @@ sudo env \
   npx --yes mytoken-gateway@preview update
 ```
 
-更新过程单任务运行，升级前备份并检查 SQLite，校验精确发布元数据；健康检查失败时恢复旧运行版本。
+更新过程单任务运行，升级前备份并检查 SQLite，校验精确发布元数据，并将运行目录与发布派生环境变量作为同一个回滚单元。只有源码、部署包、环境变量、API 和 UI 五处版本完全一致才会报告成功。
 
 ## 常用运维命令
 
@@ -114,6 +114,7 @@ mytokenctl status
 mytokenctl health
 mytokenctl ready
 mytokenctl doctor
+mytokenctl version-check
 mytokenctl logs all
 sudo mytokenctl backup
 ```

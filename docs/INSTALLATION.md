@@ -30,7 +30,7 @@ If your server uses a delayed npm mirror, keep the explicit `npm_config_registry
 Pinned release:
 
 ```bash
-sudo git clone --branch v0.1.0-preview.6 --depth 1 \
+sudo git clone --branch v0.1.0-preview.7 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -90,7 +90,7 @@ sudo env \
   npx --yes mytoken-gateway@preview update
 ```
 
-The updater refuses dirty source checkouts, validates the fetched target release, creates a consistent SQLite backup, and restores the previous runtime after a failed health check.
+The updater refuses dirty source checkouts, validates the fetched target release, creates a consistent SQLite backup, and rolls back both runtime and release-derived environment values after any deployment failure. It reports success only when the source, deployed package, configured environment, `/versionz`, `/version.json`, and served UI entry agree.
 
 ## Verify
 
@@ -99,6 +99,7 @@ mytokenctl status
 mytokenctl health
 mytokenctl ready
 mytokenctl doctor
+mytokenctl version-check
 ```
 
 The service is private by default. Keep it on loopback or add TLS and an additional identity layer before any remote exposure.

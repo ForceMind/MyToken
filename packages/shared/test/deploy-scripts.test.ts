@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -18,10 +19,21 @@ describe("deployment shell scripts", () => {
   }
 
   it("migrates release-derived environment values during upgrades", () => {
-    const source = execFileSync("sed", ["-n", "150,210p", path.resolve("deploy/install.sh")], {
-      encoding: "utf8",
-    });
+    const source = readFileSync(path.resolve("deploy/install.sh"), "utf8");
     expect(source).toContain("set_env_value MYTOKEN_VERSION");
     expect(source).toContain("set_env_value MYTOKEN_WEB_ROOT");
+    expect(source).toContain('"$source_dir/packages/cli/package.json"');
+    expect(source).toContain("environment_backup_file");
+    expect(source).toContain("transaction_active");
+    expect(source).toContain("http://127.0.0.1:8080/versionz");
+    expect(source).toContain("http://127.0.0.1:8080/version.json");
+    expect(source).toContain("--exclude dist");
+    expect(source).toContain('build_group="$(id -gn "$build_user")"');
+  });
+
+  it("reports the deployed CLI release rather than the monorepo version", () => {
+    const source = readFileSync(path.resolve("deploy/bin/mytokenctl"), "utf8");
+    expect(source).toContain("$install_dir/packages/cli/package.json");
+    expect(source).not.toContain('"$install_dir/package.json"');
   });
 });

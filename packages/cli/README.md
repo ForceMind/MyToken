@@ -25,7 +25,7 @@ sudo env \
 ### Install from GitHub
 
 ```bash
-sudo git clone --branch v0.1.0-preview.6 --depth 1 \
+sudo git clone --branch v0.1.0-preview.7 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -55,6 +55,7 @@ sudo env \
 ```bash
 mytokenctl status
 mytokenctl doctor
+mytokenctl version-check
 mytokenctl codex-status
 sudo mytokenctl backup
 ```
@@ -84,7 +85,7 @@ sudo env \
 ### 通过 GitHub 安装
 
 ```bash
-sudo git clone --branch v0.1.0-preview.6 --depth 1 \
+sudo git clone --branch v0.1.0-preview.7 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -114,6 +115,7 @@ sudo env \
 ```bash
 mytokenctl status
 mytokenctl doctor
+mytokenctl version-check
 mytokenctl codex-status
 sudo mytokenctl backup
 ```

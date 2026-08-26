@@ -43,7 +43,7 @@ The npm package is a small bootstrap CLI. It resolves its matching immutable Git
 Release tag, recommended for repeatable installation:
 
 ```bash
-sudo git clone --branch v0.1.0-preview.6 --depth 1 \
+sudo git clone --branch v0.1.0-preview.7 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -105,7 +105,7 @@ sudo env \
   npx --yes mytoken-gateway@preview update
 ```
 
-Updates are single-flight, back up and integrity-check SQLite, verify exact release metadata, and restore the previous runtime when the health check fails.
+Updates are single-flight, back up and integrity-check SQLite, verify exact release metadata, and treat the runtime plus release-derived environment values as one rollback unit. Completion requires matching source, deployed-package, configured-environment, API, and UI versions.
 
 ## Operations
 
@@ -114,6 +114,7 @@ mytokenctl status
 mytokenctl health
 mytokenctl ready
 mytokenctl doctor
+mytokenctl version-check
 mytokenctl logs all
 sudo mytokenctl backup
 ```

@@ -29,9 +29,8 @@ requestLogRepository.recoverInterrupted();
 const policyManager = new RequestPolicyManager(requestLogRepository, {
   globalConcurrency: numberEnv("MYTOKEN_MAX_GLOBAL_CONCURRENCY", 1),
 });
-const systemUpdate = new SystemUpdateService({
-  currentVersion: process.env.MYTOKEN_VERSION ?? "0.1.0-preview.6",
-});
+const currentVersion = process.env.MYTOKEN_VERSION ?? "development";
+const systemUpdate = new SystemUpdateService({ currentVersion });
 const sessionSecret = await readSecret(requiredEnv("MYTOKEN_SESSION_SECRET_FILE"));
 const keyPepper = await readSecret(requiredEnv("MYTOKEN_KEY_PEPPER_FILE"));
 const adminAuth = new AdminAuthService(adminRepository, sessionSecret);
@@ -85,6 +84,7 @@ const app = await createApiApp({
   usageStore: requestLogRepository,
   policyManager,
   systemUpdate,
+  version: currentVersion,
   keyPepper,
   adminAuth,
   codexAdminBackend: backend,

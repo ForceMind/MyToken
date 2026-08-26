@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { AdminAuthService } from "../packages/admin-auth/src/index.js";
@@ -14,6 +15,9 @@ import type { CodexAdminBackend } from "../apps/api/src/admin-routes.js";
 import { RequestPolicyManager } from "../apps/api/src/request-policy.js";
 
 const database = new MyTokenDatabase(":memory:");
+const release = JSON.parse(
+  readFileSync(new URL("../packages/cli/package.json", import.meta.url), "utf8"),
+) as { version: string };
 database.migrate();
 const adminAuth = new AdminAuthService(new AdminAuthRepository(database), randomBytes(32));
 const bootstrap = adminAuth.createBootstrapToken();
@@ -78,6 +82,7 @@ const app = await createApiApp({
   codexAdminBackend: backend,
   usageStore,
   policyManager,
+  version: release.version,
   cookieSecure: false,
   staticRoot: fileURLToPath(new URL("../apps/web/dist", import.meta.url)),
   logger: false,

@@ -15,6 +15,8 @@ codex_version="${MYTOKEN_CODEX_VERSION:-0.147.0}"
 manage_codex="${MYTOKEN_MANAGE_CODEX:-true}"
 build_user="${SUDO_USER:-root}"
 skip_tests="${MYTOKEN_SKIP_TESTS:-false}"
+environment_preexisting=false
+if [ -e "$environment_file" ]; then environment_preexisting=true; fi
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -24,9 +26,17 @@ require_command() {
 }
 
 for command_name in node npm openssl rsync curl systemctl systemd-tmpfiles install runuser \
-  groupadd useradd usermod getent sort head sed grep awk mktemp chown chmod cp mv; do
+  groupadd useradd usermod getent id sort head sed grep awk mktemp chown chmod cp mv; do
   require_command "$command_name"
 done
+
+build_group="$(id -gn "$build_user")"
+
+release_version="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(p.version)' "$source_dir/packages/cli/package.json")"
+if ! printf '%s' "$release_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$'; then
+  printf '%s\n' "Invalid release version in $source_dir/packages/cli/package.json" >&2
+  exit 1
+fi
 
 node_version="$(node --version | sed 's/^v//')"
 minimum_node="22.13.0"
@@ -58,6 +68,59 @@ fi
 
 staging_dir="$(mktemp -d /var/tmp/mytoken-build.XXXXXX)"
 cleanup() {
+  exit_status=$?
+  if [ "$exit_status" -ne 0 ] && [ "${transaction_active:-false}" = "true" ]; then
+    printf '%s\n' "Deployment failed; restoring previous runtime and environment." >&2
+    set +e
+    systemctl stop mytoken-api.service mytoken-worker.service mytoken-update.path >/dev/null 2>&1
+    if [ -n "${runtime_backup_dir:-}" ]; then
+      rsync -a --delete "$runtime_backup_dir/" "$install_dir/"
+      for unit in mytoken-worker.service mytoken-api.service mytoken-update.service mytoken-update.path; do
+        if [ -f "$install_dir/deploy/systemd/$unit" ]; then
+          install -m 0644 "$install_dir/deploy/systemd/$unit" "/etc/systemd/system/$unit"
+        fi
+      done
+      if [ -f "$install_dir/deploy/bin/mytokenctl" ]; then
+        install -m 0755 "$install_dir/deploy/bin/mytokenctl" /usr/local/sbin/mytokenctl
+      fi
+      if [ -f "$install_dir/deploy/bin/mytoken-update-runner" ]; then
+        install -d -m 0755 /usr/local/libexec
+        install -m 0755 "$install_dir/deploy/bin/mytoken-update-runner" /usr/local/libexec/mytoken-update-runner
+      fi
+    fi
+    if [ -n "${environment_backup_file:-}" ] && [ -s "$environment_backup_file" ]; then
+      cp --preserve=mode,ownership,timestamps "$environment_backup_file" "$environment_file"
+    elif [ "${environment_preexisting:-false}" != "true" ]; then
+      rm -f -- "$environment_file"
+    fi
+    systemctl daemon-reload
+    if [ "${worker_was_enabled:-false}" = "true" ]; then
+      systemctl enable mytoken-worker.service >/dev/null 2>&1
+    else
+      systemctl disable mytoken-worker.service >/dev/null 2>&1
+    fi
+    if [ "${api_was_enabled:-false}" = "true" ]; then
+      systemctl enable mytoken-api.service >/dev/null 2>&1
+    else
+      systemctl disable mytoken-api.service >/dev/null 2>&1
+    fi
+    if [ "${update_path_was_enabled:-false}" = "true" ]; then
+      systemctl enable mytoken-update.path >/dev/null 2>&1
+    else
+      systemctl disable mytoken-update.path >/dev/null 2>&1
+    fi
+    if [ "${update_path_was_active:-false}" = "true" ]; then
+      systemctl start mytoken-update.path
+    fi
+    if [ "${worker_was_active:-false}" = "true" ]; then systemctl start mytoken-worker.service; fi
+    if [ "${api_was_active:-false}" = "true" ]; then systemctl start mytoken-api.service; fi
+    transaction_active=false
+    if [ -n "${runtime_backup_dir:-}" ] || [ -n "${environment_backup_file:-}" ]; then
+      printf '%s\n' "Previous runtime and environment restored." >&2
+    else
+      printf '%s\n' "Fresh install stopped; non-secret system users and directories remain for a safe retry." >&2
+    fi
+  fi
   case "$staging_dir" in
     /var/tmp/mytoken-build.*) rm -rf -- "$staging_dir" ;;
   esac
@@ -66,18 +129,28 @@ cleanup() {
       /var/tmp/mytoken-runtime-backup.*) rm -rf -- "$runtime_backup_dir" ;;
     esac
   fi
+  if [ -n "${environment_backup_file:-}" ]; then
+    case "$environment_backup_file" in
+      /var/tmp/mytoken-env-backup.*) rm -f -- "$environment_backup_file" ;;
+    esac
+  fi
+  exit "$exit_status"
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 printf '%s\n' "Staging source from $source_dir"
 rsync -a \
-  --exclude .git --exclude node_modules --exclude coverage \
+  --exclude .git --exclude node_modules --exclude coverage --exclude dist \
+  --exclude '*.tsbuildinfo' \
   --exclude '*.sqlite' --exclude '*.sqlite-wal' --exclude '*.sqlite-shm' \
   "$source_dir/" "$staging_dir/"
-chown -R "$build_user":"$build_user" "$staging_dir"
+chown -R "$build_user":"$build_group" "$staging_dir"
 
 npm_cache="/var/tmp/mytoken-npm-cache-$build_user"
-install -d -o "$build_user" -g "$build_user" -m 0700 "$npm_cache"
+install -d -o "$build_user" -g "$build_group" -m 0700 "$npm_cache"
 
 run_build() {
   runuser -u "$build_user" -- env \
@@ -98,15 +171,41 @@ if [ "$skip_tests" != "true" ]; then
 fi
 run_build "npm run build"
 
+web_dist="$staging_dir/apps/web/dist"
+if [ ! -s "$web_dist/index.html" ] || [ ! -s "$web_dist/version.json" ]; then
+  printf '%s\n' "Frontend build is incomplete: index.html and version.json are required" >&2
+  exit 1
+fi
+web_version="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(String(p.version || ""))' "$web_dist/version.json")"
+if [ "$web_version" != "$release_version" ]; then
+  printf '%s\n' "Frontend release mismatch: expected $release_version, found ${web_version:-none}" >&2
+  exit 1
+fi
+web_asset="$(sed -n 's/.*src="\/\(assets\/index-[^"]*\.js\)".*/\1/p' "$web_dist/index.html" | head -n 1)"
+if [ -z "$web_asset" ] || [ ! -s "$web_dist/$web_asset" ]; then
+  printf '%s\n' "Frontend build is missing its entry JavaScript asset" >&2
+  exit 1
+fi
+
 if ! getent group mytoken >/dev/null 2>&1; then
   groupadd --system mytoken
 fi
+if ! getent group mytoken-api >/dev/null 2>&1; then
+  groupadd --system mytoken-api
+fi
+if ! getent group mytoken-codex >/dev/null 2>&1; then
+  groupadd --system mytoken-codex
+fi
 if ! id mytoken-api >/dev/null 2>&1; then
-  useradd --system --home-dir /var/lib/mytoken/api --shell /usr/sbin/nologin mytoken-api
+  useradd --system --gid mytoken-api --home-dir /var/lib/mytoken/api \
+    --shell /usr/sbin/nologin mytoken-api
 fi
 if ! id mytoken-codex >/dev/null 2>&1; then
-  useradd --system --home-dir /var/lib/mytoken/codex --shell /usr/sbin/nologin mytoken-codex
+  useradd --system --gid mytoken-codex --home-dir /var/lib/mytoken/codex \
+    --shell /usr/sbin/nologin mytoken-codex
 fi
+usermod -g mytoken-api mytoken-api
+usermod -g mytoken-codex mytoken-codex
 usermod -a -G mytoken mytoken-api
 usermod -a -G mytoken mytoken-codex
 
@@ -118,7 +217,7 @@ if [ ! -e "$environment_file" ]; then
   environment_tmp="$(mktemp /etc/mytoken/mytoken.env.XXXXXX)"
   cat > "$environment_tmp" <<EOF
 NODE_ENV=production
-MYTOKEN_VERSION=0.1.0-preview.6
+MYTOKEN_VERSION=$release_version
 MYTOKEN_HOST=127.0.0.1
 MYTOKEN_PORT=8080
 MYTOKEN_WEB_ROOT=$install_dir/apps/web/dist
@@ -183,9 +282,35 @@ set_env_value() {
   mv "$update_tmp" "$environment_file"
 }
 
+# Snapshot both mutable deployment surfaces before changing either one.
+runtime_backup_dir=""
+environment_backup_file=""
+transaction_active=false
+api_was_active=false
+worker_was_active=false
+update_path_was_active=false
+api_was_enabled=false
+worker_was_enabled=false
+update_path_was_enabled=false
+if [ "$environment_preexisting" = "true" ]; then
+  environment_backup_file="$(mktemp /var/tmp/mytoken-env-backup.XXXXXX)"
+  cp --preserve=mode,ownership,timestamps "$environment_file" "$environment_backup_file"
+fi
+if [ -d "$install_dir" ] && [ -f "$install_dir/package.json" ]; then
+  runtime_backup_dir="$(mktemp -d /var/tmp/mytoken-runtime-backup.XXXXXX)"
+  rsync -a "$install_dir/" "$runtime_backup_dir/"
+fi
+systemctl is-active --quiet mytoken-api.service && api_was_active=true
+systemctl is-active --quiet mytoken-worker.service && worker_was_active=true
+systemctl is-active --quiet mytoken-update.path && update_path_was_active=true
+systemctl is-enabled --quiet mytoken-api.service && api_was_enabled=true
+systemctl is-enabled --quiet mytoken-worker.service && worker_was_enabled=true
+systemctl is-enabled --quiet mytoken-update.path && update_path_was_enabled=true
+transaction_active=true
+
 # Release-derived values must follow the deployed runtime instead of staying
 # frozen at the first installation. Operator-owned policy values remain intact.
-set_env_value MYTOKEN_VERSION 0.1.0-preview.6
+set_env_value MYTOKEN_VERSION "$release_version"
 set_env_value MYTOKEN_WEB_ROOT "$install_dir/apps/web/dist"
 set_env_value MYTOKEN_CODEX_BIN "$codex_bin"
 set_env_value MYTOKEN_SUPPORTED_CODEX_VERSION "$codex_version"
@@ -195,10 +320,6 @@ if [ ! -e /etc/mytoken/providers.json ]; then
     "$staging_dir/deploy/providers.example.json" /etc/mytoken/providers.json
 fi
 
-api_was_active=false
-worker_was_active=false
-systemctl is-active --quiet mytoken-api.service && api_was_active=true
-systemctl is-active --quiet mytoken-worker.service && worker_was_active=true
 if [ "$api_was_active" = "true" ]; then systemctl stop mytoken-api.service; fi
 if [ "$worker_was_active" = "true" ]; then systemctl stop mytoken-worker.service; fi
 
@@ -226,11 +347,6 @@ if [ -f "$database_path" ]; then
   printf '%s\n' "Database backup created: $backup_path"
 fi
 
-runtime_backup_dir=""
-if [ -d "$install_dir" ] && [ -f "$install_dir/package.json" ]; then
-  runtime_backup_dir="$(mktemp -d /var/tmp/mytoken-runtime-backup.XXXXXX)"
-  rsync -a "$install_dir/" "$runtime_backup_dir/"
-fi
 install -d -o root -g root -m 0755 "$install_dir"
 rsync -a --delete --exclude .git --exclude node_modules --exclude coverage "$staging_dir/" "$install_dir/"
 chown -R root:root "$install_dir"
@@ -266,19 +382,50 @@ while [ "$attempt" -le 30 ]; do
 done
 
 if [ "$health_ok" != "true" ]; then
-  printf '%s\n' "MyToken did not become healthy; attempting runtime rollback." >&2
-  if [ -n "$runtime_backup_dir" ]; then
-    systemctl stop mytoken-api.service mytoken-worker.service || true
-    rsync -a --delete "$runtime_backup_dir/" "$install_dir/"
-    systemctl daemon-reload
-    systemctl restart mytoken-worker.service
-    systemctl restart mytoken-api.service
-    printf '%s\n' "Previous runtime restored. Inspect: mytokenctl logs all" >&2
-  fi
+  printf '%s\n' "MyToken did not become healthy; inspect: mytokenctl logs all" >&2
   exit 1
 fi
 
+version_value() {
+  node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(String(p.version || p.apiVersion || p.currentVersion || ""))'
+}
+deployed_version="$(node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.stdout.write(String(p.version || ""))' "$install_dir/packages/cli/package.json")"
+configured_version="$(sed -n 's/^MYTOKEN_VERSION=//p' "$environment_file" | head -n 1)"
+if [ "$deployed_version" != "$release_version" ] || [ "$configured_version" != "$release_version" ]; then
+  printf '%s\n' "Release state mismatch: source=$release_version deployed=${deployed_version:-none} configured=${configured_version:-none}" >&2
+  exit 1
+fi
+api_version="$(curl --fail --silent --max-time 10 http://127.0.0.1:8080/versionz | version_value)"
+if [ "$api_version" != "$release_version" ]; then
+  printf '%s\n' "API release mismatch: expected $release_version, found ${api_version:-none}" >&2
+  exit 1
+fi
+served_web_version="$(curl --fail --silent --max-time 10 http://127.0.0.1:8080/version.json | version_value)"
+if [ "$served_web_version" != "$release_version" ]; then
+  printf '%s\n' "Served UI release mismatch: expected $release_version, found ${served_web_version:-none}" >&2
+  exit 1
+fi
+served_index="$staging_dir/served-index.html"
+served_headers="$staging_dir/served-index.headers"
+curl --fail --silent --max-time 10 -D "$served_headers" \
+  'http://127.0.0.1:8080/?deploy-check=1' -o "$served_index"
+if ! grep -Eiq '^cache-control:.*no-store' "$served_headers"; then
+  printf '%s\n' "Served UI entry is missing Cache-Control: no-store" >&2
+  exit 1
+fi
+served_asset="$(sed -n 's/.*src="\/\(assets\/index-[^"]*\.js\)".*/\1/p' "$served_index" | head -n 1)"
+if [ -z "$served_asset" ] || ! curl --fail --silent --max-time 10 \
+  "http://127.0.0.1:8080/$served_asset" | grep -Fq "$release_version"; then
+  printf '%s\n' "Served UI entry asset does not contain release $release_version" >&2
+  exit 1
+fi
+
+transaction_active=false
+
 printf '%s\n' "MyToken deployment completed."
+printf '%s\n' "Source version: $release_version"
+printf '%s\n' "Web root: $install_dir/apps/web/dist"
+printf '%s\n' "Web asset: $served_asset"
 printf '%s\n' "Status: mytokenctl status"
 printf '%s\n' "First access: ssh -L 8080:127.0.0.1:8080 YOUR_USER@YOUR_SERVER"
 printf '%s\n' "Then open http://127.0.0.1:8080 and run: sudo mytokenctl bootstrap-token"

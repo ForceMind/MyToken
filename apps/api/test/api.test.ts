@@ -26,6 +26,23 @@ function backend(response: GatewayResponse): GatewayBackend {
 }
 
 describe("public API", () => {
+  it("exposes an uncached release version for deployment diagnostics", async () => {
+    const app = await createApiApp({
+      backend: backend(
+        createGatewayResponse({ id: "resp-version", model: "gpt-allowed", output: [] }),
+      ),
+      keyStore: new MemoryApiKeyStore(),
+      keyPepper: randomBytes(32),
+      version: "0.1.0-preview.test",
+    });
+    apps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/versionz" });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: "ok", version: "0.1.0-preview.test" });
+    expect(response.headers["cache-control"]).toContain("no-store");
+  });
+
   it("authenticates a key and filters models by policy", async () => {
     const pepper = randomBytes(32);
     const key = createMyTokenKey(pepper, {

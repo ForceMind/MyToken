@@ -32,7 +32,7 @@ The installer:
 5. creates missing service users, directories, and Secrets without overwriting existing ones;
 6. stops existing services and creates a pre-deploy database backup;
 7. stages `/opt/mytoken`, installs production dependencies, units, and `mytokenctl`;
-8. restarts services and waits for `/healthz`.
+8. restarts services, validates `/healthz`, and requires the source, deployed package, configured environment, `/versionz`, `/version.json`, and served UI entry to report the same release.
 
 Set `MYTOKEN_SKIP_TESTS=true` only for emergency diagnostics, never for a normal release.
 
@@ -43,6 +43,7 @@ mytokenctl status
 mytokenctl health
 mytokenctl ready
 mytokenctl doctor
+mytokenctl version-check
 mytokenctl codex-status
 mytokenctl permissions
 ```
@@ -140,4 +141,4 @@ mytokenctl status
 mytokenctl logs all
 ```
 
-The installer never overwrites existing Secrets or the environment file. It creates a stopped-service database backup before replacing the runtime copy. Restore only while `mytoken-api` is stopped, preserve ownership `mytoken-api:mytoken-api` and mode `0600`, then run `mytokenctl db-check` before starting the API.
+The installer never overwrites existing Secrets or operator-owned policy settings. It updates only release-derived environment values, snapshots the previous environment and runtime, and restores them together after any failed deployment. It also creates a stopped-service database backup before replacing the runtime copy. Restore a database only while `mytoken-api` is stopped, preserve ownership `mytoken-api:mytoken-api` and mode `0600`, then run `mytokenctl db-check` before starting the API.

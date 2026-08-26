@@ -3,7 +3,7 @@
 ## Package
 
 - Name: `mytoken-gateway`
-- Next preview version: `0.1.0-preview.6`
+- Next preview version: `0.1.0-preview.7`
 - Public install command: `sudo npx --yes mytoken-gateway@preview install`
 - Published contents: CLI, README, and Apache-2.0 license only
 - Default source ref: release Git tag matching the npm package version
@@ -13,7 +13,7 @@ The CLI clones the configured GitHub repository/ref, installs required common Li
 
 ## Current registry state
 
-`mytoken-gateway@0.1.0-preview.5` has been published and the `preview` dist-tag points to it. The `latest` tag still points to preview.1, so installation and updates must explicitly use `@preview` until a stable release exists.
+`mytoken-gateway@0.1.0-preview.6` has been published and the `preview` dist-tag points to it. Preview.7 is prepared to make runtime, environment, API, and UI version validation transactional. The `latest` tag still points to preview.1, so installation and updates must explicitly use `@preview` until a stable release exists.
 
 ## Initial public preview publication
 

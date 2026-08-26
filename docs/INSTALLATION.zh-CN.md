@@ -30,7 +30,7 @@ sudo env \
 使用固定发布版本：
 
 ```bash
-sudo git clone --branch v0.1.0-preview.6 --depth 1 \
+sudo git clone --branch v0.1.0-preview.7 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -90,7 +90,7 @@ sudo env \
   npx --yes mytoken-gateway@preview update
 ```
 
-更新器会拒绝存在未提交修改的源码目录，校验拉取后的目标版本，创建一致性 SQLite 备份；健康检查失败时恢复旧运行版本。
+更新器会拒绝存在未提交修改的源码目录，校验拉取后的目标版本并创建一致性 SQLite 备份。任何部署失败都会同时恢复旧运行目录与发布派生环境变量；只有源码、部署包、环境变量、`/versionz`、`/version.json` 和实际 UI 入口版本一致才会报告成功。
 
 ## 验证
 
@@ -99,6 +99,7 @@ mytokenctl status
 mytokenctl health
 mytokenctl ready
 mytokenctl doctor
+mytokenctl version-check
 ```
 
 服务默认是私有的。应保持回环监听；如需远程访问，应额外配置 TLS 和身份认证层。

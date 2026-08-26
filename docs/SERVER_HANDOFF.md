@@ -138,7 +138,7 @@ Create `/etc/mytoken/mytoken.env`:
 
 ```text
 NODE_ENV=production
-MYTOKEN_VERSION=0.1.0-preview.6
+MYTOKEN_VERSION=0.1.0-preview.7
 MYTOKEN_HOST=127.0.0.1
 MYTOKEN_PORT=8080
 MYTOKEN_WEB_ROOT=/opt/mytoken/apps/web/dist

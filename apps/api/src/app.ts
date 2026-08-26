@@ -95,6 +95,8 @@ export interface CreateApiAppOptions {
   policyManager?: RequestPolicyManager;
   trustProxy?: boolean | string | string[];
   systemUpdate?: SystemUpdateService;
+  /** Release identifier exposed by the diagnostic version endpoint. */
+  version?: string;
 }
 
 interface AuthenticatedKey {
@@ -178,7 +180,7 @@ export async function createApiApp(options: CreateApiAppOptions): Promise<Fastif
       maxAge: "1h",
       immutable: false,
       setHeaders(response, filePath) {
-        if (filePath.endsWith("index.html")) {
+        if (filePath.endsWith("index.html") || filePath.endsWith("version.json")) {
           response.header("Cache-Control", "no-store, no-cache, must-revalidate");
         }
       },
@@ -186,6 +188,10 @@ export async function createApiApp(options: CreateApiAppOptions): Promise<Fastif
   }
 
   app.get("/healthz", () => ({ status: "ok" }));
+  app.get("/versionz", (_request, reply) => {
+    reply.header("Cache-Control", "no-store, no-cache, must-revalidate");
+    return { status: "ok", version: options.version ?? "unknown" };
+  });
   app.get("/readyz", async (_request, reply) => {
     if (!(await backendReady(options.backend))) {
       return reply.code(503).send({ status: "not_ready" });
@@ -345,7 +351,7 @@ export async function createApiApp(options: CreateApiAppOptions): Promise<Fastif
         !request.url.startsWith("/api/") &&
         !request.url.startsWith("/v1/")
       ) {
-        reply.header("Cache-Control", "no-cache");
+        reply.header("Cache-Control", "no-store, no-cache, must-revalidate");
         return reply.sendFile("index.html");
       }
       return sendError(reply, 404, "Route was not found", "not_found");

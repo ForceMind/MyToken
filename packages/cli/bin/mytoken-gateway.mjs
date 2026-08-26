@@ -114,6 +114,18 @@ function installPrerequisites() {
     "cut",
     "wc",
     "stty",
+    "systemd-tmpfiles",
+    "install",
+    "id",
+    "groupadd",
+    "useradd",
+    "usermod",
+    "getent",
+    "mktemp",
+    "chown",
+    "chmod",
+    "cp",
+    "mv",
   ];
   const missing = required.filter((name) => !commandExists(name));
   if (missing.length === 0) return;
@@ -132,6 +144,8 @@ function installPrerequisites() {
       "grep",
       "sed",
       "gawk",
+      "systemd",
+      "glibc-common",
     ]);
     return;
   }
@@ -150,6 +164,8 @@ function installPrerequisites() {
       "grep",
       "sed",
       "gawk",
+      "systemd",
+      "libc-bin",
     ]);
     return;
   }

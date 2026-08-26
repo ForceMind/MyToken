@@ -38,6 +38,7 @@ Commands:
   provider-reload         Restart API to reload provider configuration
   permissions             Show important ownership and modes
   doctor                  Show non-sensitive runtime versions and paths
+  version-check           Compare deployed package, API, and UI versions
   db-check                Run SQLite integrity_check
   backup                  Create a consistent stopped-service DB backup
   bootstrap-token         Print the one-time bootstrap token to this terminal
@@ -184,6 +185,26 @@ case "$command_name" in
     printf 'Database: %s\n' "$(env_value MYTOKEN_DB_PATH)"
     "$0" health
     "$0" ready || true
+    "$0" version-check || true
+    ;;
+  version-check)
+    deployed_version="$(node -e 'const p=require(process.argv[1]); console.log(p.version)' "$install_dir/packages/cli/package.json" 2>/dev/null || true)"
+    configured_version="$(env_value MYTOKEN_VERSION)"
+    api_version="$(curl --fail --silent --max-time 5 http://127.0.0.1:8080/versionz 2>/dev/null | \
+      node -e 'let s=""; process.stdin.on("data", d => s += d); process.stdin.on("end", () => { try { const p=JSON.parse(s); process.stdout.write(String(p.version || p.apiVersion || p.currentVersion || "")); } catch {} })' || true)"
+    ui_version="$(curl --fail --silent --max-time 5 http://127.0.0.1:8080/version.json 2>/dev/null | \
+      node -e 'let s=""; process.stdin.on("data", d => s += d); process.stdin.on("end", () => { try { const p=JSON.parse(s); process.stdout.write(String(p.version || "")); } catch {} })' || true)"
+    printf 'Deployed package: %s\n' "${deployed_version:-unavailable}"
+    printf 'Configured environment: %s\n' "${configured_version:-unavailable}"
+    printf 'API /versionz: %s\n' "${api_version:-unavailable}"
+    printf 'UI /version.json: %s\n' "${ui_version:-unavailable}"
+    if [ -n "$deployed_version" ] && [ "$deployed_version" = "$configured_version" ] && \
+      [ "$deployed_version" = "$api_version" ] && [ "$deployed_version" = "$ui_version" ]; then
+      printf '%s\n' 'Version status: MATCH'
+    else
+      printf '%s\n' 'Version status: MISMATCH'
+      exit 1
+    fi
     ;;
   db-check)
     database_path="$(env_value MYTOKEN_DB_PATH)"
@@ -268,7 +289,7 @@ case "$command_name" in
     as_root env MYTOKEN_SOURCE_DIR="$source_dir" "$source_dir/deploy/install.sh"
     ;;
   version)
-    node -e 'const p=require(process.argv[1]); console.log(p.version)' "$install_dir/package.json"
+    node -e 'const p=require(process.argv[1]); console.log(p.version)' "$install_dir/packages/cli/package.json"
     ;;
   help|-h|--help)
     usage

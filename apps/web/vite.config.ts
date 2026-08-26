@@ -2,13 +2,27 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { readFileSync } from "node:fs";
+import type { Plugin } from "vite";
 
 const release = JSON.parse(
   readFileSync(new URL("../../packages/cli/package.json", import.meta.url), "utf8"),
 ) as { version: string };
 
+function releaseMetadataPlugin(): Plugin {
+  return {
+    name: "mytoken-release-metadata",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "version.json",
+        source: `${JSON.stringify({ version: release.version }, null, 2)}\n`,
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), releaseMetadataPlugin()],
   define: {
     __MYTOKEN_VERSION__: JSON.stringify(release.version),
   },

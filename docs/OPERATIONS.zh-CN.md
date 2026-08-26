@@ -11,6 +11,7 @@ mytokenctl status
 mytokenctl health
 mytokenctl ready
 mytokenctl doctor
+mytokenctl version-check
 mytokenctl permissions
 ```
 
@@ -74,7 +75,7 @@ systemctl status mytoken-update.path mytoken-update.service
 journalctl -u mytoken-update.service
 ```
 
-更新会校验精确 npm 版本、integrity、Git `gitHead` 和源码 Commit。健康检查失败时恢复旧运行目录。数据库只自动前滚，不自动执行未经测试的降级迁移。
+更新会校验精确 npm 版本、integrity、Git `gitHead` 和源码 Commit。任何部署失败都会把旧运行目录与发布派生环境变量一起恢复；只有源码、部署包、环境变量、API 与 UI 版本一致才报告成功。数据库只自动前滚，不自动执行未经测试的降级迁移。
 
 ## 第一次初始化
 
