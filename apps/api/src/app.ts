@@ -177,6 +177,11 @@ export async function createApiApp(options: CreateApiAppOptions): Promise<Fastif
       cacheControl: true,
       maxAge: "1h",
       immutable: false,
+      setHeaders(response, filePath) {
+        if (filePath.endsWith("index.html")) {
+          response.header("Cache-Control", "no-store, no-cache, must-revalidate");
+        }
+      },
     });
   }
 

@@ -118,7 +118,7 @@ if [ ! -e "$environment_file" ]; then
   environment_tmp="$(mktemp /etc/mytoken/mytoken.env.XXXXXX)"
   cat > "$environment_tmp" <<EOF
 NODE_ENV=production
-MYTOKEN_VERSION=0.1.0-preview.5
+MYTOKEN_VERSION=0.1.0-preview.6
 MYTOKEN_HOST=127.0.0.1
 MYTOKEN_PORT=8080
 MYTOKEN_WEB_ROOT=$install_dir/apps/web/dist
@@ -167,6 +167,28 @@ ensure_env_default MYTOKEN_TRUST_PROXY ""
 ensure_env_default MYTOKEN_PROVIDERS_FILE /etc/mytoken/providers.json
 ensure_env_default MYTOKEN_ALLOW_INSECURE_PROVIDERS false
 ensure_env_default MYTOKEN_PROVIDER_REQUEST_TIMEOUT_MS 120000
+
+set_env_value() {
+  key="$1"
+  value="$2"
+  update_tmp="$(mktemp /etc/mytoken/mytoken.env.update.XXXXXX)"
+  awk -v wanted="$key" -v replacement="$value" '
+    BEGIN { found = 0 }
+    $0 ~ "^" wanted "=" { print wanted "=" replacement; found = 1; next }
+    { print }
+    END { if (!found) print wanted "=" replacement }
+  ' "$environment_file" > "$update_tmp"
+  chown root:mytoken "$update_tmp"
+  chmod 0640 "$update_tmp"
+  mv "$update_tmp" "$environment_file"
+}
+
+# Release-derived values must follow the deployed runtime instead of staying
+# frozen at the first installation. Operator-owned policy values remain intact.
+set_env_value MYTOKEN_VERSION 0.1.0-preview.6
+set_env_value MYTOKEN_WEB_ROOT "$install_dir/apps/web/dist"
+set_env_value MYTOKEN_CODEX_BIN "$codex_bin"
+set_env_value MYTOKEN_SUPPORTED_CODEX_VERSION "$codex_version"
 
 if [ ! -e /etc/mytoken/providers.json ]; then
   install -o root -g mytoken-api -m 0640 \

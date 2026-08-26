@@ -43,7 +43,7 @@ npm 包只是一个很小的引导 CLI。它会解析与版本对应的不可变
 使用发布 Tag，适合可重复部署：
 
 ```bash
-sudo git clone --branch v0.1.0-preview.5 --depth 1 \
+sudo git clone --branch v0.1.0-preview.6 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh

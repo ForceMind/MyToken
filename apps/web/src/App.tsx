@@ -172,6 +172,26 @@ function Console({ username }: { username: string }): ReactNode {
         </div>
       </aside>
       <main className="mx-auto max-w-6xl px-5 py-8 md:ml-64 md:px-10">
+        <div className="mb-7 pr-14 md:hidden">
+          <Brand />
+          <nav className="mt-5 flex gap-2 overflow-x-auto pb-2" aria-label="移动端导航">
+            {navigation.map(({ to, label, icon: Icon }) => (
+              <Link
+                key={to}
+                to={to}
+                className={`nav-item min-w-max border border-[var(--border)] ${location.pathname === to ? "nav-item-active" : ""}`}
+              >
+                <Icon size={17} /> {label}
+              </Link>
+            ))}
+            <button
+              className="nav-item min-w-max border border-[var(--border)]"
+              onClick={() => logout.mutate()}
+            >
+              <LogOut size={17} /> 退出
+            </button>
+          </nav>
+        </div>
         <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/codex" element={<CodexPage />} />
@@ -222,6 +242,29 @@ function Overview(): ReactNode {
           good
         />
       </div>
+      <Panel title="功能入口">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {(
+            [
+              ["/keys", "API Keys", "模型、IP、额度、并发和余额限制"],
+              ["/playground", "测试聊天", "使用 MyToken Key 测试真实模型调用"],
+              ["/requests", "请求记录", "查看 Key、IP、Token、上下文和错误"],
+              ["/codex", "Codex 连接", "账号、套餐、额度窗口和累计用量"],
+              ["/integration", "接入配置", "Codex CLI 和兼容客户端配置"],
+              ["/system", "系统", "Provider 状态、服务状态和页面更新"],
+            ] satisfies Array<[string, string, string]>
+          ).map(([to, title, description]) => (
+            <Link
+              key={to}
+              to={to}
+              className="rounded-xl border border-[var(--border)] p-4 no-underline transition hover:bg-[var(--hover)]"
+            >
+              <p className="font-medium text-[var(--text)]">{title}</p>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">{description}</p>
+            </Link>
+          ))}
+        </div>
+      </Panel>
       <Panel title="使用边界">
         <p className="text-sm leading-6 text-slate-300">
           MyToken 是个人私有预览网关，不是 OpenAI 官方 API。Key 可供支持自定义 OpenAI Responses

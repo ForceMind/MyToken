@@ -30,7 +30,7 @@ If your server uses a delayed npm mirror, keep the explicit `npm_config_registry
 Pinned release:
 
 ```bash
-sudo git clone --branch v0.1.0-preview.5 --depth 1 \
+sudo git clone --branch v0.1.0-preview.6 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh

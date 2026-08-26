@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MyToken">
+  <defs>
+    <linearGradient id="g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#34d399"/>
+      <stop offset="1" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#0f172a"/>
+  <path d="M13 16h9l10 12 10-12h9v32h-9V30L32 42 22 30v18h-9V16Z" fill="url(#g)"/>
+  <circle cx="32" cy="34" r="4" fill="#f8fafc"/>
+  <path d="M30 37h4v8h-4z" fill="#f8fafc"/>
+</svg>

@@ -43,7 +43,7 @@ The npm package is a small bootstrap CLI. It resolves its matching immutable Git
 Release tag, recommended for repeatable installation:
 
 ```bash
-sudo git clone --branch v0.1.0-preview.5 --depth 1 \
+sudo git clone --branch v0.1.0-preview.6 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
