@@ -12,10 +12,12 @@ import {
 import { createApiApp } from "./app.js";
 import {
   AnthropicMessagesProviderBackend,
+  OpenAIChatProviderBackend,
   OpenAIResponsesProviderBackend,
 } from "./external-provider-backends.js";
 import { MultiProviderGatewayBackend } from "./multi-provider-backend.js";
 import { loadExternalProviderConfiguration } from "./provider-config.js";
+import { ProviderManagementService } from "./provider-management-service.js";
 import { WorkerSocketBackend } from "./worker-socket-backend.js";
 import { RequestPolicyManager } from "./request-policy.js";
 import { SystemUpdateService } from "./system-update-service.js";
@@ -45,35 +47,32 @@ const codexBackend = new WorkerSocketBackend({
   socketPath: requiredEnv("MYTOKEN_WORKER_SOCKET"),
   requestTimeoutMs: numberEnv("MYTOKEN_REQUEST_TIMEOUT_MS", 120_000),
 });
-const providerConfiguration = await loadExternalProviderConfiguration(
-  process.env.MYTOKEN_PROVIDERS_FILE,
-  { allowInsecureHttp: booleanEnv("MYTOKEN_ALLOW_INSECURE_PROVIDERS", false) },
-);
-const external = providerConfiguration.active.map((provider) => ({
-  protocol: provider.protocol,
-  backend:
-    provider.protocol === "anthropic"
-      ? new AnthropicMessagesProviderBackend({
-          id: provider.id,
-          name: provider.name,
-          baseUrl: provider.baseUrl,
-          apiKey: provider.apiKey,
-          models: provider.configuredModels,
-          timeoutMs: numberEnv("MYTOKEN_PROVIDER_REQUEST_TIMEOUT_MS", 120_000),
-        })
-      : new OpenAIResponsesProviderBackend({
-          id: provider.id,
-          name: provider.name,
-          baseUrl: provider.baseUrl,
-          apiKey: provider.apiKey,
-          models: provider.configuredModels,
-          timeoutMs: numberEnv("MYTOKEN_PROVIDER_REQUEST_TIMEOUT_MS", 120_000),
-        }),
-}));
+const providerConfigPath = requiredEnv("MYTOKEN_PROVIDERS_FILE");
+const providerSecretDirectory = requiredEnv("MYTOKEN_PROVIDER_SECRETS_DIR");
+const allowInsecureProviders = booleanEnv("MYTOKEN_ALLOW_INSECURE_PROVIDERS", false);
+const providerTimeoutMs = numberEnv("MYTOKEN_PROVIDER_REQUEST_TIMEOUT_MS", 120_000);
+const providerConfiguration = await loadExternalProviderConfiguration(providerConfigPath, {
+  allowInsecureHttp: allowInsecureProviders,
+});
 const backend = new MultiProviderGatewayBackend({
   codex: codexBackend,
-  external,
+  external: createExternalBackends(providerConfiguration.active, providerTimeoutMs),
   configurationStatuses: providerConfiguration.statuses,
+});
+const providerManagement = new ProviderManagementService({
+  configPath: providerConfigPath,
+  secretDirectory: providerSecretDirectory,
+  allowInsecureHttp: allowInsecureProviders,
+  reload: async () => {
+    const configuration = await loadExternalProviderConfiguration(providerConfigPath, {
+      allowInsecureHttp: allowInsecureProviders,
+    });
+    backend.replaceExternal({
+      external: createExternalBackends(configuration.active, providerTimeoutMs),
+      configurationStatuses: configuration.statuses,
+    });
+    await backend.probe();
+  },
 });
 await backend.probe();
 
@@ -84,6 +83,7 @@ const app = await createApiApp({
   usageStore: requestLogRepository,
   policyManager,
   systemUpdate,
+  providerManagement,
   version: currentVersion,
   keyPepper,
   adminAuth,
@@ -146,4 +146,40 @@ function booleanEnv(name: string, fallback: boolean): boolean {
   if (value === "true") return true;
   if (value === "false") return false;
   throw new Error(`Environment variable ${name} must be true or false`);
+}
+
+function createExternalBackends(
+  providers: Awaited<ReturnType<typeof loadExternalProviderConfiguration>>["active"],
+  timeoutMs: number,
+) {
+  return providers.map((provider) => ({
+    protocol: provider.protocol,
+    backend:
+      provider.protocol === "anthropic"
+        ? new AnthropicMessagesProviderBackend({
+            id: provider.id,
+            name: provider.name,
+            baseUrl: provider.baseUrl,
+            apiKey: provider.apiKey,
+            models: provider.configuredModels,
+            timeoutMs,
+          })
+        : provider.protocol === "openai-chat"
+          ? new OpenAIChatProviderBackend({
+              id: provider.id,
+              name: provider.name,
+              baseUrl: provider.baseUrl,
+              apiKey: provider.apiKey,
+              models: provider.configuredModels,
+              timeoutMs,
+            })
+          : new OpenAIResponsesProviderBackend({
+              id: provider.id,
+              name: provider.name,
+              baseUrl: provider.baseUrl,
+              apiKey: provider.apiKey,
+              models: provider.configuredModels,
+              timeoutMs,
+            }),
+  }));
 }

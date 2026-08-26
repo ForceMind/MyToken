@@ -20,12 +20,9 @@ describe("external provider backends", () => {
       .mockResolvedValueOnce(response({ data: [{ id: "deepseek-chat", name: "DeepSeek Chat" }] }))
       .mockResolvedValueOnce(
         response({
-          id: "resp_ds",
-          output: [
-            { type: "reasoning", id: "r1" },
-            { type: "message", id: "m1", content: [{ type: "output_text", text: "hello" }] },
-          ],
-          usage: { input_tokens: 4, output_tokens: 2, total_tokens: 6 },
+          id: "chatcmpl_ds",
+          choices: [{ message: { role: "assistant", content: "hello" } }],
+          usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 },
         }),
       );
     const backend = createDeepSeekBackend("sk-test", { fetch: fetcher });
@@ -41,8 +38,11 @@ describe("external provider backends", () => {
       { apiKeyId: "key" },
     );
     expect(result.output_text).toBe("hello");
-    expect(result.output.some((item) => item.type === "reasoning")).toBe(false);
-    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)).model).toBe("deepseek-chat");
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toMatchObject({
+      model: "deepseek-chat",
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(fetcher.mock.calls[1]?.[0]).toBe("https://api.deepseek.com/chat/completions");
     expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get("authorization")).toBe(
       "Bearer sk-test",
     );

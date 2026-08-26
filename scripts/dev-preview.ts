@@ -13,6 +13,10 @@ import { createGatewayResponse } from "../packages/openai-compat/src/index.js";
 import { createApiApp, type GatewayBackend } from "../apps/api/src/app.js";
 import type { CodexAdminBackend } from "../apps/api/src/admin-routes.js";
 import { RequestPolicyManager } from "../apps/api/src/request-policy.js";
+import type {
+  ManagedProviderInput,
+  ManagedProviderView,
+} from "../apps/api/src/provider-management-service.js";
 
 const database = new MyTokenDatabase(":memory:");
 const release = JSON.parse(
@@ -25,6 +29,28 @@ adminAuth.installBootstrapToken(bootstrap);
 const keyStore = new ApiKeyRepository(database);
 const usageStore = new RequestLogRepository(database);
 const policyManager = new RequestPolicyManager(usageStore, { globalConcurrency: 2 });
+let managedProviders: ManagedProviderView[] = [
+  {
+    id: "anthropic",
+    name: "Claude",
+    protocol: "anthropic",
+    baseUrl: "https://api.anthropic.com",
+    enabled: true,
+    models: [],
+    apiKeyConfigured: false,
+    status: "api_key_file_missing",
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    protocol: "openai-chat",
+    baseUrl: "https://api.deepseek.com",
+    enabled: true,
+    models: [],
+    apiKeyConfigured: false,
+    status: "api_key_file_missing",
+  },
+];
 
 const backend: GatewayBackend & CodexAdminBackend = {
   isReady: () => true,
@@ -71,6 +97,27 @@ const backend: GatewayBackend & CodexAdminBackend = {
     }),
   cancelDeviceLogin: () => Promise.resolve({}),
   logoutAccount: () => Promise.resolve({}),
+  providerStatuses: () =>
+    Promise.resolve([
+      {
+        id: "codex",
+        name: "Codex",
+        protocol: "codex-app-server",
+        enabled: true,
+        ready: true,
+        modelsCount: 1,
+        error: null,
+      },
+      ...managedProviders.map((provider) => ({
+        id: provider.id,
+        name: provider.name,
+        protocol: provider.protocol,
+        enabled: provider.enabled && provider.apiKeyConfigured,
+        ready: provider.enabled && provider.apiKeyConfigured,
+        modelsCount: provider.models.length,
+        error: provider.apiKeyConfigured ? null : "api_key_file_missing",
+      })),
+    ]),
 };
 
 const app = await createApiApp({
@@ -82,6 +129,26 @@ const app = await createApiApp({
   codexAdminBackend: backend,
   usageStore,
   policyManager,
+  providerManagement: {
+    list: () => Promise.resolve(managedProviders),
+    upsert: (input: ManagedProviderInput) => {
+      const configured: ManagedProviderView = {
+        id: input.id,
+        name: input.name,
+        protocol: input.protocol,
+        baseUrl: input.baseUrl,
+        enabled: input.enabled,
+        models: input.models,
+        apiKeyConfigured: Boolean(input.apiKey),
+        status: null,
+      };
+      managedProviders = [
+        ...managedProviders.filter((provider) => provider.id !== input.id),
+        configured,
+      ];
+      return Promise.resolve(configured);
+    },
+  },
   version: release.version,
   cookieSecure: false,
   staticRoot: fileURLToPath(new URL("../apps/web/dist", import.meta.url)),

@@ -42,6 +42,8 @@ sudo mytokenctl codex-login
 
 ## Provider
 
+优先在“系统 → 模型 Providers”中配置，也可以使用终端：
+
 ```bash
 sudo mytokenctl provider-status
 sudo mytokenctl provider-set anthropic
@@ -60,12 +62,13 @@ sudo mytokenctl backup
 
 ## 更新
 
-推荐在管理台使用“系统 → 系统更新”，或者：
+安装 preview.8 后，推荐在管理台使用“系统 → 系统更新”。首次从旧版本升级执行：
 
 ```bash
-sudo env \
-  npm_config_registry=https://registry.npmjs.org \
-  npx --yes mytoken-gateway@preview update
+cd /srv/mytoken-src
+sudo git fetch --force --tags origin
+sudo git checkout --detach v0.1.0-preview.8
+sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 
 查看更新器：
@@ -75,7 +78,7 @@ systemctl status mytoken-update.path mytoken-update.service
 journalctl -u mytoken-update.service
 ```
 
-更新会校验精确 npm 版本、integrity、Git `gitHead` 和源码 Commit。任何部署失败都会把旧运行目录与发布派生环境变量一起恢复；只有源码、部署包、环境变量、API 与 UI 版本一致才报告成功。数据库只自动前滚，不自动执行未经测试的降级迁移。
+更新器只信任 `ForceMind/MyToken` GitHub Origin，获取并校验发布 Tag 与 `packages/cli/package.json` 版本，不执行 npm。任何部署失败都会把旧运行目录与发布派生环境变量一起恢复；只有源码、部署包、环境变量、API 与 UI 版本一致才报告成功。数据库只自动前滚，不自动执行未经测试的降级迁移。
 
 ## 第一次初始化
 

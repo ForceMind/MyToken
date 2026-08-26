@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-MyToken Gateway 是部署在可信 Linux 服务器上的个人私有 AI 模型网关。它可以使用服务器本地的 Codex/ChatGPT 登录，也可以接入 Anthropic、DeepSeek 及其他兼容 OpenAI Responses API 的模型服务，然后为你自己的设备和程序签发受限制的 MyToken API Key。
+MyToken Gateway 是部署在可信 Linux 服务器上的个人私有 AI 模型网关。它可以使用服务器本地的 Codex/ChatGPT 登录，也可以接入 Anthropic、DeepSeek，以及兼容 OpenAI Chat Completions 或 Responses API 的模型服务，然后为你自己的设备和程序签发受限制的 MyToken API Key。
 
 > MyToken 是独立的个人私有网关，与 OpenAI、Anthropic、DeepSeek 不存在隶属、授权或官方合作关系。
 
@@ -28,22 +28,12 @@ MyToken Gateway 是部署在可信 Linux 服务器上的个人私有 AI 模型�
 
 安装器支持 OpenCloudOS/RHEL/Fedora 以及 Debian/Ubuntu 系列。API 默认只监听 `127.0.0.1:8080`。
 
-## 通过 npm 安装——推荐
-
-```bash
-sudo env \
-  npm_config_registry=https://registry.npmjs.org \
-  npx --yes mytoken-gateway@preview install
-```
-
-npm 包只是一个很小的引导 CLI。它会解析与版本对应的不可变 Git Tag，校验 npm integrity 和已发布的 Git commit，然后运行仓库中的安装器。
-
-## 通过 GitHub 安装
+## 通过 GitHub 安装——当前开发通道
 
 使用发布 Tag，适合可重复部署：
 
 ```bash
-sudo git clone --branch v0.1.0-preview.7 --depth 1 \
+sudo git clone --branch v0.1.0-preview.8 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -83,26 +73,25 @@ sudo mytokenctl codex-status
 sudo mytokenctl codex-login
 ```
 
-## 添加 Claude 或 DeepSeek
+## 添加 Claude、DeepSeek 或其他 Provider
 
 每个外部 Provider 都需要自己的上游 API Key；Codex 登录不能授权 Claude 或 DeepSeek。
 
-```bash
-sudo mytokenctl provider-set anthropic
-sudo mytokenctl provider-set deepseek
-sudo mytokenctl provider-status
-```
+进入“系统 → 模型 Providers”，选择 Claude 或 DeepSeek 后填写对应上游 API Key。其他 Anthropic Messages、OpenAI Chat Completions 或 OpenAI Responses 服务可通过“添加其他兼容 Provider”配置。Key 只写入服务器受保护文件，网页不会回传明文。
+
+仍可使用 `mytokenctl provider-set` 在终端配置。
 
 Codex 为了兼容现有客户端继续使用裸模型 ID；Claude 使用 `anthropic/<model-id>`；DeepSeek 使用 `deepseek/<model-id>`；其他兼容 Provider 使用 `<provider>/<model-id>`。参见[模型 Provider](docs/PROVIDERS.zh-CN.md)。
 
 ## 更新
 
-安装 preview.3 或更新版本后，可以在管理台进入“系统 → 系统更新”，也可以运行：
+安装 preview.8 后，管理台“系统 → 系统更新”会直接发现并安装最新的不可变 GitHub Tag，不再依赖 npm。首次从旧版本升级到 preview.8 请执行：
 
 ```bash
-sudo env \
-  npm_config_registry=https://registry.npmjs.org \
-  npx --yes mytoken-gateway@preview update
+cd /srv/mytoken-src
+sudo git fetch --force --tags origin
+sudo git checkout --detach v0.1.0-preview.8
+sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 
 更新过程单任务运行，升级前备份并检查 SQLite，校验精确发布元数据，并将运行目录与发布派生环境变量作为同一个回滚单元。只有源码、部署包、环境变量、API 和 UI 五处版本完全一致才会报告成功。

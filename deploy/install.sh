@@ -10,6 +10,8 @@ script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 source_dir="${MYTOKEN_SOURCE_DIR:-$(CDPATH= cd -- "$script_dir/.." && pwd)}"
 install_dir="${MYTOKEN_INSTALL_DIR:-/opt/mytoken}"
 environment_file="${MYTOKEN_ENV_FILE:-/etc/mytoken/mytoken.env}"
+provider_config_path="${MYTOKEN_PROVIDERS_FILE:-/var/lib/mytoken/api/providers.json}"
+provider_secret_directory="${MYTOKEN_PROVIDER_SECRETS_DIR:-/var/lib/mytoken/api/provider-secrets}"
 codex_bin="${MYTOKEN_CODEX_BIN:-}"
 codex_version="${MYTOKEN_CODEX_VERSION:-0.147.0}"
 manage_codex="${MYTOKEN_MANAGE_CODEX:-true}"
@@ -235,7 +237,8 @@ MYTOKEN_MAX_PENDING_TOOL_CALLS=8
 MYTOKEN_MAX_TOOL_RESULT_BYTES=1048576
 MYTOKEN_MAX_GLOBAL_CONCURRENCY=1
 MYTOKEN_TRUST_PROXY=
-MYTOKEN_PROVIDERS_FILE=/etc/mytoken/providers.json
+MYTOKEN_PROVIDERS_FILE=$provider_config_path
+MYTOKEN_PROVIDER_SECRETS_DIR=$provider_secret_directory
 MYTOKEN_ALLOW_INSECURE_PROVIDERS=false
 MYTOKEN_PROVIDER_REQUEST_TIMEOUT_MS=120000
 EOF
@@ -263,7 +266,8 @@ ensure_env_default() {
 }
 ensure_env_default MYTOKEN_MAX_GLOBAL_CONCURRENCY 1
 ensure_env_default MYTOKEN_TRUST_PROXY ""
-ensure_env_default MYTOKEN_PROVIDERS_FILE /etc/mytoken/providers.json
+ensure_env_default MYTOKEN_PROVIDERS_FILE "$provider_config_path"
+ensure_env_default MYTOKEN_PROVIDER_SECRETS_DIR "$provider_secret_directory"
 ensure_env_default MYTOKEN_ALLOW_INSECURE_PROVIDERS false
 ensure_env_default MYTOKEN_PROVIDER_REQUEST_TIMEOUT_MS 120000
 
@@ -314,11 +318,23 @@ set_env_value MYTOKEN_VERSION "$release_version"
 set_env_value MYTOKEN_WEB_ROOT "$install_dir/apps/web/dist"
 set_env_value MYTOKEN_CODEX_BIN "$codex_bin"
 set_env_value MYTOKEN_SUPPORTED_CODEX_VERSION "$codex_version"
+set_env_value MYTOKEN_PROVIDERS_FILE "$provider_config_path"
+set_env_value MYTOKEN_PROVIDER_SECRETS_DIR "$provider_secret_directory"
 
-if [ ! -e /etc/mytoken/providers.json ]; then
-  install -o root -g mytoken-api -m 0640 \
-    "$staging_dir/deploy/providers.example.json" /etc/mytoken/providers.json
+if [ ! -e "$provider_config_path" ]; then
+  node "$staging_dir/deploy/scripts/migrate-provider-config.mjs" \
+    /etc/mytoken/providers.json \
+    "$staging_dir/deploy/providers.example.json" \
+    "$provider_config_path" \
+    "$provider_secret_directory"
 fi
+chown -R mytoken-api:mytoken-api "$provider_secret_directory"
+chmod 0700 "$provider_secret_directory"
+chmod 0600 "$provider_config_path"
+chown mytoken-api:mytoken-api "$provider_config_path"
+for provider_secret in "$provider_secret_directory"/*; do
+  if [ -f "$provider_secret" ]; then chmod 0600 "$provider_secret"; fi
+done
 
 if [ "$api_was_active" = "true" ]; then systemctl stop mytoken-api.service; fi
 if [ "$worker_was_active" = "true" ]; then systemctl stop mytoken-worker.service; fi

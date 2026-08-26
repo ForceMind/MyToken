@@ -6,7 +6,8 @@ Requires=mytoken-worker.service
 [Service]
 Type=simple
 User=mytoken-api
-Group=mytoken
+Group=mytoken-api
+SupplementaryGroups=mytoken
 EnvironmentFile=/etc/mytoken/mytoken.env
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 LoadCredential=session-secret:/etc/mytoken/secrets/session-secret

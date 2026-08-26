@@ -4,7 +4,7 @@
 
 ## English
 
-Installer and operations bootstrap for [MyToken Gateway](https://github.com/ForceMind/MyToken), a private AI model gateway for Codex, Claude, DeepSeek, and compatible Responses providers.
+Installer and operations bootstrap for [MyToken Gateway](https://github.com/ForceMind/MyToken), a private AI model gateway for Codex, Claude, DeepSeek, and compatible Chat/Responses providers.
 
 > Preview software. MyToken is independent and is not affiliated with, endorsed by, or operated by OpenAI, Anthropic, or DeepSeek.
 
@@ -14,7 +14,7 @@ Installer and operations bootstrap for [MyToken Gateway](https://github.com/Forc
 - Node.js 22.13 or newer and npm
 - root or sudo access
 
-### Install from npm
+### Historical npm bootstrap
 
 ```bash
 sudo env \
@@ -22,10 +22,12 @@ sudo env \
   npx --yes mytoken-gateway@preview install
 ```
 
+The npm development channel is paused after preview.7. Use the GitHub tag below for current builds.
+
 ### Install from GitHub
 
 ```bash
-sudo git clone --branch v0.1.0-preview.7 --depth 1 \
+sudo git clone --branch v0.1.0-preview.8 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -42,12 +44,13 @@ Open `http://127.0.0.1:8080`.
 
 ### Update
 
-Use **System → System update** or:
+After preview.8 is installed, **System → System update** updates directly from GitHub tags. For the first upgrade:
 
 ```bash
-sudo env \
-  npm_config_registry=https://registry.npmjs.org \
-  npx --yes mytoken-gateway@preview update
+cd /srv/mytoken-src
+sudo git fetch --force --tags origin
+sudo git checkout --detach v0.1.0-preview.8
+sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 
 ### Operations
@@ -64,7 +67,7 @@ The npm package contains only the bootstrap CLI, this README, and the Apache-2.0
 
 ## 简体中文
 
-[MyToken Gateway](https://github.com/ForceMind/MyToken) 的安装和运维引导包。MyToken 是面向 Codex、Claude、DeepSeek 和兼容 Responses Provider 的个人私有 AI 模型网关。
+[MyToken Gateway](https://github.com/ForceMind/MyToken) 的安装和运维引导包。MyToken 是面向 Codex、Claude、DeepSeek 和兼容 Chat/Responses Provider 的个人私有 AI 模型网关。
 
 > 这是预览软件。MyToken 与 OpenAI、Anthropic、DeepSeek 不存在隶属、授权或官方合作关系。
 
@@ -74,7 +77,7 @@ The npm package contains only the bootstrap CLI, this README, and the Apache-2.0
 - Node.js 22.13 或更新版本及 npm
 - root 或 sudo 权限
 
-### 通过 npm 安装
+### 历史 npm 引导包
 
 ```bash
 sudo env \
@@ -82,10 +85,12 @@ sudo env \
   npx --yes mytoken-gateway@preview install
 ```
 
+npm 开发通道在 preview.7 后暂停，当前版本请使用下面的 GitHub Tag。
+
 ### 通过 GitHub 安装
 
 ```bash
-sudo git clone --branch v0.1.0-preview.7 --depth 1 \
+sudo git clone --branch v0.1.0-preview.8 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -102,12 +107,13 @@ sudo mytokenctl bootstrap-token
 
 ### 更新
 
-使用管理台“系统 → 系统更新”，或者：
+安装 preview.8 后，管理台“系统 → 系统更新”会直接使用 GitHub Tag。首次升级请执行：
 
 ```bash
-sudo env \
-  npm_config_registry=https://registry.npmjs.org \
-  npx --yes mytoken-gateway@preview update
+cd /srv/mytoken-src
+sudo git fetch --force --tags origin
+sudo git checkout --detach v0.1.0-preview.8
+sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 
 ### 常用运维

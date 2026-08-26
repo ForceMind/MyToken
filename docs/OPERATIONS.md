@@ -6,17 +6,7 @@ The one-click installer places `mytokenctl` at `/usr/local/sbin/mytokenctl`. Run
 
 ## Install or upgrade
 
-Fresh server through npm:
-
-```bash
-sudo npx --yes mytoken-gateway@preview install
-```
-
-This is the intended one-command path. Node.js 22.13+ and npm are the only prerequisites that must already exist because npm itself launches the installer. Common Linux tools and the pinned compatible official Codex npm package are installed by the command.
-
-The npm preview clones the immutable Git tag matching the package version.
-
-From the checked-out source branch:
+Use the checked-out immutable GitHub tag:
 
 ```bash
 cd /srv/mytoken-src
@@ -65,7 +55,7 @@ sudo mytokenctl provider-set deepseek
 sudo mytokenctl provider-reload
 ```
 
-The interactive `provider-set` command disables terminal echo while reading the upstream API key. Provider keys are stored under `/etc/mytoken/provider-secrets` and are readable only by `mytoken-api`. See [Model Providers](PROVIDERS.md).
+The same settings are available under **System → Model Providers**. The interactive `provider-set` command disables terminal echo while reading the upstream API key. Provider keys are stored under `/var/lib/mytoken/api/provider-secrets` and are readable only by `mytoken-api`. See [Model Providers](PROVIDERS.md).
 
 Service control:
 
@@ -102,7 +92,7 @@ Do not paste the displayed Bootstrap Token, device code, Session Cookie, MyToken
 
 ### Management-console update
 
-After `mytoken-update.path` is installed, open **System → System Update**, review the registry version, and click **Update to latest**. The browser only creates an authenticated, CSRF-protected update marker. A fixed root-owned systemd oneshot resolves the exact npm preview version, verifies its npm integrity and Git commit metadata, runs the existing rollback-capable installer, and writes a read-only status file for the console.
+After `mytoken-update.path` is installed, open **System → System Update**, review the GitHub tag, and click **Update to latest**. The browser only creates an authenticated, CSRF-protected update marker. A fixed root-owned systemd oneshot verifies the trusted GitHub origin, fetches release tags, validates the tag against `packages/cli/package.json`, checks out the immutable tag, runs the rollback-capable installer, and writes a read-only status file for the console. It does not execute npm.
 
 The page cannot submit a repository, Git ref, package name, command, or shell argument.
 
@@ -116,7 +106,8 @@ journalctl -u mytoken-update.service
 ```bash
 cd /srv/mytoken-src
 git status --short --branch
-git pull --ff-only
+git fetch --force --tags origin
+git checkout --detach v0.1.0-preview.8
 sudo mytokenctl deploy /srv/mytoken-src
 ```
 

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminAuthService } from "@mytoken/admin-auth";
 import {
@@ -14,6 +14,7 @@ import { createGatewayResponse } from "@mytoken/openai-compat";
 import type { CodexAdminBackend } from "../src/admin-routes.js";
 import { createApiApp, type GatewayBackend } from "../src/app.js";
 import { RequestPolicyManager } from "../src/request-policy.js";
+import type { ManagedProviderInput } from "../src/provider-management-service.js";
 
 const apps: Array<Awaited<ReturnType<typeof createApiApp>>> = [];
 const databases: MyTokenDatabase[] = [];
@@ -61,6 +62,16 @@ describe("administrator API", () => {
     const usageStore = new RequestLogRepository(database);
     const policyManager = new RequestPolicyManager(usageStore, { globalConcurrency: 2 });
     const keyPepper = randomBytes(32);
+    const upsertProvider = vi.fn(async (input: ManagedProviderInput) => ({
+      id: input.id,
+      name: input.name,
+      protocol: input.protocol,
+      baseUrl: input.baseUrl,
+      enabled: input.enabled,
+      models: input.models,
+      apiKeyConfigured: true,
+      status: null,
+    }));
     const app = await createApiApp({
       backend,
       keyStore,
@@ -70,6 +81,10 @@ describe("administrator API", () => {
       codexAdminBackend: backend,
       usageStore,
       policyManager,
+      providerManagement: {
+        list: async () => [],
+        upsert: upsertProvider,
+      },
       cookieSecure: false,
     });
     apps.push(app);
@@ -207,6 +222,30 @@ describe("administrator API", () => {
       path: "/v1/responses",
       sourceIp: "127.0.0.1",
     });
+
+    const configuredProvider = await app.inject({
+      method: "PUT",
+      url: "/api/admin/provider-configs/deepseek",
+      headers: {
+        host: "mytoken.test",
+        origin: "http://mytoken.test",
+        cookie: sessionCookie,
+        "x-csrf-token": loginBody.csrfToken,
+      },
+      payload: {
+        name: "DeepSeek",
+        protocol: "openai-chat",
+        baseUrl: "https://api.deepseek.com",
+        enabled: true,
+        models: ["deepseek-chat"],
+        apiKey: "sk-provider-secret",
+      },
+    });
+    expect(configuredProvider.statusCode).toBe(200);
+    expect(configuredProvider.body).not.toContain("sk-provider-secret");
+    expect(upsertProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "deepseek", protocol: "openai-chat" }),
+    );
 
     const logout = await app.inject({
       method: "POST",

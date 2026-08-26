@@ -26,11 +26,15 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-r
 
 import {
   ApiError,
+  adminSessionInvalidEvent,
   api,
   type ApiKeySummary,
   type CreatedKey,
   type DeviceLogin,
   type GatewayRequestLog,
+  type GatewayProviderStatus,
+  type ManagedProvider,
+  type ManagedProviderInput,
 } from "./api.js";
 
 declare const __MYTOKEN_VERSION__: string;
@@ -44,9 +48,15 @@ export function App(): ReactNode {
 }
 
 function SessionGate(): ReactNode {
+  const [, setAuthGeneration] = useState(0);
+  useEffect(() => {
+    const invalidate = () => setAuthGeneration((value) => value + 1);
+    window.addEventListener(adminSessionInvalidEvent, invalidate);
+    return () => window.removeEventListener(adminSessionInvalidEvent, invalidate);
+  }, []);
   const session = useQuery({ queryKey: ["session"], queryFn: api.session });
   if (session.isPending) return <Loading label="验证管理员会话" />;
-  if (session.isError) return <LoginPage />;
+  if (session.isError || !api.hasAdminCsrf()) return <LoginPage />;
   return <Console username={session.data.user.username} />;
 }
 
@@ -898,9 +908,26 @@ wire_api = "responses"`;
 
 function SystemPage(): ReactNode {
   const queryClient = useQueryClient();
-  const health = useQuery({ queryKey: ["health"], queryFn: api.health });
-  const ready = useQuery({ queryKey: ["ready"], queryFn: api.ready });
+  const [providerEditor, setProviderEditor] = useState<ProviderEditorState | null>(null);
+  const health = useQuery({ queryKey: ["health"], queryFn: api.health, refetchInterval: 10_000 });
+  const ready = useQuery({ queryKey: ["ready"], queryFn: api.ready, refetchInterval: 10_000 });
   const providers = useQuery({ queryKey: ["providers"], queryFn: api.providers });
+  const providerConfigs = useQuery({
+    queryKey: ["provider-configs"],
+    queryFn: api.providerConfigs,
+  });
+  const saveProvider = useMutation({
+    mutationFn: (value: { id: string; input: ManagedProviderInput }) =>
+      api.upsertProvider(value.id, value.input),
+    onSuccess: async () => {
+      setProviderEditor(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["providers"] }),
+        queryClient.invalidateQueries({ queryKey: ["provider-configs"] }),
+        queryClient.invalidateQueries({ queryKey: ["models"] }),
+      ]);
+    },
+  });
   const update = useQuery({
     queryKey: ["system-update"],
     queryFn: api.systemUpdate,
@@ -919,28 +946,71 @@ function SystemPage(): ReactNode {
       <Panel title="服务状态">
         <dl className="detail-grid">
           <Detail label="API" value={health.data?.status ?? "unknown"} />
-          <Detail label="Gateway" value={ready.data?.status ?? "not ready"} />
+          <Detail label="可用 Provider 路由" value={ready.data?.status ?? "not ready"} />
           <Detail label="部署模式" value="single-server private preview" />
           <Detail label="协议" value="OpenAI Responses subset" />
         </dl>
       </Panel>
       <Panel title="模型 Providers">
         <div className="grid gap-3 md:grid-cols-2">
-          {providers.data?.data.map((provider) => (
-            <div key={provider.id} className="rounded-xl border border-white/8 p-4">
-              <div className="flex items-center justify-between">
-                <p className="font-medium">{provider.name}</p>
-                <span className={provider.ready ? "text-emerald-300" : "text-amber-300"}>
-                  {provider.ready ? "Ready" : provider.enabled ? "Unavailable" : "未配置"}
-                </span>
+          {providers.data?.data.map((provider) => {
+            const configuration = providerConfigs.data?.data.find(
+              (entry) => entry.id === provider.id,
+            );
+            return (
+              <div key={provider.id} className="rounded-xl border border-white/8 p-4">
+                <div className="flex items-center justify-between">
+                  <p className="font-medium">{provider.name}</p>
+                  <span className={provider.ready ? "text-emerald-300" : "text-amber-300"}>
+                    {providerStatusLabel(provider)}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  {provider.id} · {provider.protocol} · {provider.modelsCount} models
+                </p>
+                {provider.error && (
+                  <p className="mt-2 text-xs text-red-300">{providerErrorLabel(provider.error)}</p>
+                )}
+                {provider.id !== "codex" && (
+                  <button
+                    type="button"
+                    className="button-secondary mt-4"
+                    onClick={() =>
+                      setProviderEditor(
+                        configuration
+                          ? { ...configuration, isNew: false }
+                          : providerPreset(provider.id),
+                      )
+                    }
+                  >
+                    {configuration?.apiKeyConfigured ? "修改配置" : "配置 API Key"}
+                  </button>
+                )}
               </div>
-              <p className="mt-2 text-xs text-slate-500">
-                {provider.id} · {provider.protocol} · {provider.modelsCount} models
-              </p>
-              {provider.error && <p className="mt-2 text-xs text-red-300">{provider.error}</p>}
-            </div>
-          ))}
+            );
+          })}
         </div>
+        {providers.isError && <FormError message={messageOf(providers.error)} />}
+        {providerConfigs.isError && <FormError message={messageOf(providerConfigs.error)} />}
+        <div className="mt-4">
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => setProviderEditor(providerPreset("custom"))}
+          >
+            添加其他兼容 Provider
+          </button>
+        </div>
+        {providerEditor && (
+          <ProviderEditor
+            key={`${providerEditor.id}-${providerEditor.isNew ? "new" : "edit"}`}
+            provider={providerEditor}
+            loading={saveProvider.isPending}
+            error={saveProvider.isError ? messageOf(saveProvider.error) : ""}
+            onCancel={() => setProviderEditor(null)}
+            onSave={(id, input) => saveProvider.mutate({ id, input })}
+          />
+        )}
       </Panel>
       <Panel title="系统更新" action={<RefreshButton onClick={() => update.refetch()} />}>
         {update.isError ? (
@@ -949,7 +1019,12 @@ function SystemPage(): ReactNode {
           <>
             <dl className="detail-grid">
               <Detail label="当前版本" value={update.data?.currentVersion ?? "—"} />
-              <Detail label="Preview 最新版" value={update.data?.latest.version ?? "检查中"} />
+              <Detail label="GitHub 最新版" value={update.data?.latest.version ?? "检查中"} />
+              <Detail
+                label="更新来源"
+                value={update.data?.latest.repository ?? "ForceMind/MyToken"}
+              />
+              <Detail label="GitHub Tag" value={update.data?.latest.tag ?? "—"} />
               <Detail label="更新状态" value={update.data?.status.status ?? "idle"} />
               <Detail label="目标版本" value={update.data?.status.version ?? "—"} />
             </dl>
@@ -963,7 +1038,7 @@ function SystemPage(): ReactNode {
                 onClick={() => {
                   if (
                     window.confirm(
-                      `确认更新到 ${update.data?.latest.version ?? "preview 最新版"}？更新期间 API 和 Codex Worker 会短暂重启，失败时会自动恢复旧运行版本。`,
+                      `确认从 GitHub 更新到 ${update.data?.latest.tag ?? "最新发布 Tag"}？更新期间 API 和 Codex Worker 会短暂重启，失败时会自动恢复旧运行版本。`,
                     )
                   ) {
                     startUpdate.mutate();
@@ -982,6 +1057,167 @@ function SystemPage(): ReactNode {
       </Panel>
     </Page>
   );
+}
+
+type ProviderEditorState = ManagedProvider & { isNew: boolean };
+
+function ProviderEditor({
+  provider,
+  loading,
+  error,
+  onCancel,
+  onSave,
+}: {
+  provider: ProviderEditorState;
+  loading: boolean;
+  error: string;
+  onCancel: () => void;
+  onSave: (id: string, input: ManagedProviderInput) => void;
+}): ReactNode {
+  const [validation, setValidation] = useState("");
+  function submit(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    setValidation("");
+    const data = new FormData(event.currentTarget);
+    const id = (provider.isNew ? formString(data, "id") : provider.id).trim().toLowerCase();
+    if (!/^[a-z][a-z0-9_-]{1,31}$/u.test(id) || id === "codex") {
+      setValidation("Provider ID 需要使用 2-32 位小写字母、数字、下划线或短横线");
+      return;
+    }
+    const apiKey = formString(data, "apiKey").trim();
+    if (!provider.apiKeyConfigured && apiKey.length < 8) {
+      setValidation("首次配置必须填写 API Key");
+      return;
+    }
+    const models = formString(data, "models")
+      .split(/[\n,]+/u)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    onSave(id, {
+      name: formString(data, "name").trim(),
+      protocol: formString(data, "protocol") as ManagedProviderInput["protocol"],
+      baseUrl: formString(data, "baseUrl").trim(),
+      enabled: data.has("enabled"),
+      models,
+      ...(apiKey ? { apiKey } : {}),
+    });
+  }
+  return (
+    <form className="mt-5 space-y-4 rounded-xl border border-[var(--border)] p-5" onSubmit={submit}>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="font-medium">
+            {provider.isNew ? "添加 Provider" : `配置 ${provider.name}`}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            API Key 只写入服务器受限目录；保存后不会回传到浏览器。
+          </p>
+        </div>
+        <button type="button" className="button-secondary" onClick={onCancel}>
+          取消
+        </button>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field
+          name="id"
+          label="Provider ID"
+          defaultValue={provider.id}
+          disabled={!provider.isNew}
+        />
+        <Field name="name" label="显示名称" defaultValue={provider.name} />
+        <label className="block text-sm text-slate-300">
+          <span className="mb-2 block">上游协议</span>
+          <select className="input" name="protocol" defaultValue={provider.protocol} required>
+            <option value="anthropic">Anthropic Messages（Claude）</option>
+            <option value="openai-chat">OpenAI Chat Completions（DeepSeek 等）</option>
+            <option value="openai-responses">OpenAI Responses</option>
+          </select>
+        </label>
+        <Field name="baseUrl" label="Base URL" type="url" defaultValue={provider.baseUrl} />
+        <Field
+          name="apiKey"
+          label={provider.apiKeyConfigured ? "API Key（留空保持不变）" : "API Key"}
+          type="password"
+          autoComplete="new-password"
+          required={!provider.apiKeyConfigured}
+        />
+        <Field
+          name="models"
+          label="模型 ID（逗号分隔；留空则请求上游 /models）"
+          defaultValue={provider.models.join(", ")}
+          required={false}
+        />
+      </div>
+      <label className="flex items-center gap-2 text-sm text-slate-300">
+        <input name="enabled" type="checkbox" defaultChecked={provider.enabled} /> 启用此 Provider
+      </label>
+      <FormError message={validation || error} />
+      <Button loading={loading}>保存并立即加载</Button>
+    </form>
+  );
+}
+
+function providerPreset(id: string): ProviderEditorState {
+  if (id === "anthropic") {
+    return {
+      id,
+      name: "Claude",
+      protocol: "anthropic",
+      baseUrl: "https://api.anthropic.com",
+      enabled: true,
+      models: [],
+      apiKeyConfigured: false,
+      status: "api_key_file_missing",
+      isNew: false,
+    };
+  }
+  if (id === "deepseek") {
+    return {
+      id,
+      name: "DeepSeek",
+      protocol: "openai-chat",
+      baseUrl: "https://api.deepseek.com",
+      enabled: true,
+      models: [],
+      apiKeyConfigured: false,
+      status: "api_key_file_missing",
+      isNew: false,
+    };
+  }
+  return {
+    id: "",
+    name: "",
+    protocol: "openai-responses",
+    baseUrl: "",
+    enabled: true,
+    models: [],
+    apiKeyConfigured: false,
+    status: null,
+    isNew: true,
+  };
+}
+
+function providerStatusLabel(provider: GatewayProviderStatus): string {
+  if (provider.ready) return "Ready";
+  if (provider.error === "codex_not_authenticated") return "未登录";
+  if (provider.error === "api_key_file_missing" || provider.error === "api_key_missing") {
+    return "未配置";
+  }
+  if (!provider.enabled) return "已停用";
+  return "不可用";
+}
+
+function providerErrorLabel(error: string): string {
+  const labels: Record<string, string> = {
+    codex_not_authenticated: "Codex 账号尚未登录",
+    codex_unavailable: "Codex Worker 不可用",
+    codex_models_unavailable: "Codex 模型列表不可用",
+    api_key_file_missing: "尚未配置 API Key",
+    api_key_missing: "API Key 为空",
+    disabled_by_configuration: "已在配置中停用",
+    provider_unavailable: "无法连接上游或模型接口不兼容",
+  };
+  return labels[error] ?? error;
 }
 
 function KeyModal({
@@ -1153,11 +1389,11 @@ function Panel({
 }
 
 function Field(props: InputHTMLAttributes<HTMLInputElement> & { label: string }): ReactNode {
-  const { label, ...inputProps } = props;
+  const { label, required = true, ...inputProps } = props;
   return (
     <label className="block text-sm text-slate-300">
       <span className="mb-2 block">{label}</span>
-      <input required className="input" {...inputProps} />
+      <input required={required} className="input" {...inputProps} />
     </label>
   );
 }
@@ -1318,14 +1554,19 @@ function formatTime(value: number | null | undefined, seconds = false): string {
 
 function isNewerVersion(latest: string | undefined, current: string | null | undefined): boolean {
   if (!latest || !current) return false;
-  const parse = (value: string): number[] =>
-    value
-      .replace(/^v/u, "")
-      .split(/[.-]/u)
-      .map((part) => Number(part))
-      .filter((part) => Number.isFinite(part));
+  const parse = (value: string): number[] | null => {
+    const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-preview\.(\d+))?$/u.exec(value);
+    if (!match) return null;
+    return [
+      Number(match[1]),
+      Number(match[2]),
+      Number(match[3]),
+      match[4] ? Number(match[4]) : Number.MAX_SAFE_INTEGER,
+    ];
+  };
   const left = parse(latest);
   const right = parse(current);
+  if (!left || !right) return false;
   for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
     const a = left[index] ?? 0;
     const b = right[index] ?? 0;

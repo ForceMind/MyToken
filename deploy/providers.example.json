@@ -5,15 +5,15 @@
       "name": "Claude",
       "protocol": "anthropic",
       "baseUrl": "https://api.anthropic.com",
-      "apiKeyFile": "/etc/mytoken/provider-secrets/anthropic",
+      "apiKeyFile": "/var/lib/mytoken/api/provider-secrets/anthropic",
       "enabled": true
     },
     {
       "id": "deepseek",
       "name": "DeepSeek",
-      "protocol": "openai-responses",
+      "protocol": "openai-chat",
       "baseUrl": "https://api.deepseek.com",
-      "apiKeyFile": "/etc/mytoken/provider-secrets/deepseek",
+      "apiKeyFile": "/var/lib/mytoken/api/provider-secrets/deepseek",
       "enabled": true
     }
   ]

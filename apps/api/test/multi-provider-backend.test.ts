@@ -10,14 +10,14 @@ import {
   resolveProviderModel,
 } from "../src/multi-provider-backend.js";
 
-function codex(): GatewayBackend & CodexAdminBackend {
+function codex(connected = true): GatewayBackend & CodexAdminBackend {
   return {
     isReady: () => true,
     probe: async () => true,
     listModels: async () => [{ id: "gpt-codex", displayName: "GPT Codex" }],
     createResponse: async (request) =>
       createGatewayResponse({ id: "resp-codex", model: request.model, output: [] }),
-    account: async () => ({}),
+    account: async () => (connected ? { account: { type: "chatgpt" } } : { account: null }),
     rateLimits: async () => ({}),
     usage: async () => ({}),
     startDeviceLogin: async () => ({}),
@@ -72,5 +72,19 @@ describe("MultiProviderGatewayBackend", () => {
       providerId: "codex",
       upstreamModel: "gpt-codex",
     });
+  });
+
+  it("does not report Codex ready when models are visible but the account is logged out", async () => {
+    const router = new MultiProviderGatewayBackend({ codex: codex(false) });
+    await expect(router.probe()).resolves.toBe(false);
+    expect(router.isReady()).toBe(false);
+    await expect(router.providerStatuses()).resolves.toMatchObject([
+      {
+        id: "codex",
+        ready: false,
+        modelsCount: 1,
+        error: "codex_not_authenticated",
+      },
+    ]);
   });
 });

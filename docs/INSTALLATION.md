@@ -6,31 +6,12 @@
 
 Use a Linux server with systemd, Node.js 22.13 or newer, npm, and root/sudo access. MyToken does not install its services on macOS or Windows.
 
-## Option A: npm bootstrap — recommended
-
-```bash
-sudo env \
-  npm_config_registry=https://registry.npmjs.org \
-  npx --yes mytoken-gateway@preview install
-```
-
-The bootstrap package:
-
-1. resolves the exact npm preview version;
-2. checks out the matching Git tag under `/srv/mytoken-src`;
-3. verifies npm integrity, published `gitHead`, source origin, and commit;
-4. installs the pinned compatible Codex CLI when needed;
-5. runs formatting, type, lint, test, database, contract, and build checks;
-6. installs and starts the systemd services.
-
-If your server uses a delayed npm mirror, keep the explicit `npm_config_registry` setting shown above.
-
-## Option B: GitHub source
+## GitHub source — current channel
 
 Pinned release:
 
 ```bash
-sudo git clone --branch v0.1.0-preview.7 --depth 1 \
+sudo git clone --branch v0.1.0-preview.8 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -45,7 +26,7 @@ cd /srv/mytoken-src
 sudo ./deploy/install.sh
 ```
 
-The GitHub path runs the same tests, backup, staging, systemd, health-check, and rollback logic as the npm bootstrap.
+The installer runs formatting, type, lint, tests, database, Codex contract, build, backup, staging, systemd, release consistency, health-check, and rollback gates.
 
 ## First access
 
@@ -72,7 +53,7 @@ sudo mytokenctl codex-status
 sudo mytokenctl codex-login
 ```
 
-Optional external providers:
+External providers can be configured directly under **System → Model Providers**. The page supports Claude, DeepSeek, and custom Anthropic Messages, OpenAI Chat Completions, or OpenAI Responses endpoints. Terminal configuration remains available:
 
 ```bash
 sudo mytokenctl provider-set anthropic
@@ -82,12 +63,13 @@ sudo mytokenctl provider-status
 
 ## Update
 
-Use **System → System update** in the console or:
+After preview.8 is installed, use **System → System update**. The privileged updater fetches and verifies immutable tags directly from `ForceMind/MyToken` on GitHub; it does not query or execute npm. For the one-time upgrade from an older npm-based release:
 
 ```bash
-sudo env \
-  npm_config_registry=https://registry.npmjs.org \
-  npx --yes mytoken-gateway@preview update
+cd /srv/mytoken-src
+sudo git fetch --force --tags origin
+sudo git checkout --detach v0.1.0-preview.8
+sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 
 The updater refuses dirty source checkouts, validates the fetched target release, creates a consistent SQLite backup, and rolls back both runtime and release-derived environment values after any deployment failure. It reports success only when the source, deployed package, configured environment, `/versionz`, `/version.json`, and served UI entry agree.

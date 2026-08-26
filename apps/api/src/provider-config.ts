@@ -4,7 +4,17 @@ import { z } from "zod";
 
 import { MyTokenError } from "@mytoken/shared";
 
-export type ExternalProviderProtocol = "anthropic" | "openai-responses";
+export type ExternalProviderProtocol = "anthropic" | "openai-responses" | "openai-chat";
+
+export interface ProviderDefinition {
+  id: string;
+  name: string;
+  protocol: ExternalProviderProtocol;
+  baseUrl: string;
+  apiKeyFile: string;
+  enabled?: boolean | undefined;
+  models?: readonly string[] | undefined;
+}
 
 export interface ExternalProviderConfig {
   id: string;
@@ -24,11 +34,11 @@ export interface ProviderConfigurationStatus {
   reason: string | null;
 }
 
-const providerSchema = z
+export const providerSchema = z
   .object({
     id: z.string().regex(/^[a-z][a-z0-9_-]{1,31}$/u),
     name: z.string().min(1).max(64),
-    protocol: z.enum(["anthropic", "openai-responses"]),
+    protocol: z.enum(["anthropic", "openai-responses", "openai-chat"]),
     baseUrl: z.string().url(),
     apiKeyFile: z.string().min(1).max(4096),
     enabled: z.boolean().optional(),
@@ -36,7 +46,7 @@ const providerSchema = z
   })
   .strict();
 
-const configSchema = z
+export const providerConfigSchema = z
   .object({
     providers: z.array(providerSchema).max(32),
   })
@@ -48,13 +58,14 @@ export async function loadExternalProviderConfiguration(
 ): Promise<{
   active: ExternalProviderConfig[];
   statuses: ProviderConfigurationStatus[];
+  definitions: ProviderDefinition[];
 }> {
-  if (!configPath) return { active: [], statuses: [] };
+  if (!configPath) return { active: [], statuses: [], definitions: [] };
   let raw: string;
   try {
     raw = await readFile(configPath, "utf8");
   } catch (error) {
-    if (isEnoent(error)) return { active: [], statuses: [] };
+    if (isEnoent(error)) return { active: [], statuses: [], definitions: [] };
     throw new MyTokenError(
       "provider_config_unreadable",
       "Provider config could not be read",
@@ -67,7 +78,7 @@ export async function loadExternalProviderConfiguration(
   } catch (error) {
     throw new MyTokenError("provider_config_invalid", "Provider config is not valid JSON", error);
   }
-  const parsed = configSchema.safeParse(decoded);
+  const parsed = providerConfigSchema.safeParse(decoded);
   if (!parsed.success) {
     throw new MyTokenError("provider_config_invalid", "Provider config does not match its schema");
   }
@@ -121,7 +132,12 @@ export async function loadExternalProviderConfiguration(
     });
     statuses.push(status(provider, true, null));
   }
-  return { active, statuses };
+  return { active, statuses, definitions: parsed.data.providers };
+}
+
+export async function loadProviderDefinitions(configPath: string): Promise<ProviderDefinition[]> {
+  const loaded = await loadExternalProviderConfiguration(configPath);
+  return loaded.definitions;
 }
 
 function status(

@@ -3,7 +3,7 @@
 ## Package
 
 - Name: `mytoken-gateway`
-- Next preview version: `0.1.0-preview.7`
+- Working GitHub preview version: `0.1.0-preview.8`
 - Public install command: `sudo npx --yes mytoken-gateway@preview install`
 - Published contents: CLI, README, and Apache-2.0 license only
 - Default source ref: release Git tag matching the npm package version
@@ -13,7 +13,7 @@ The CLI clones the configured GitHub repository/ref, installs required common Li
 
 ## Current registry state
 
-`mytoken-gateway@0.1.0-preview.6` has been published and the `preview` dist-tag points to it. Preview.7 is prepared to make runtime, environment, API, and UI version validation transactional. The `latest` tag still points to preview.1, so installation and updates must explicitly use `@preview` until a stable release exists.
+`mytoken-gateway@0.1.0-preview.7` is the last npm preview in this development phase. Starting with preview.8, development updates use immutable GitHub tags and the npm package is intentionally not published until the project is considered sufficiently complete. The `latest` tag remains a historical preview and must not be used for current deployment.
 
 ## Initial public preview publication
 

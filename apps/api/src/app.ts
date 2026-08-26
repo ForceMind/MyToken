@@ -26,6 +26,7 @@ import {
   type ApiKeyManagementStore,
   type CodexAdminBackend,
 } from "./admin-routes.js";
+import type { ProviderManagementService } from "./provider-management-service.js";
 import { PolicyError, type RequestPolicyManager } from "./request-policy.js";
 import type { SystemUpdateService } from "./system-update-service.js";
 import type { GatewayUsageStore } from "./usage-store.js";
@@ -95,6 +96,7 @@ export interface CreateApiAppOptions {
   policyManager?: RequestPolicyManager;
   trustProxy?: boolean | string | string[];
   systemUpdate?: SystemUpdateService;
+  providerManagement?: ProviderManagementService;
   /** Release identifier exposed by the diagnostic version endpoint. */
   version?: string;
 }
@@ -168,6 +170,7 @@ export async function createApiApp(options: CreateApiAppOptions): Promise<Fastif
       ...(options.usageStore ? { usageStore: options.usageStore } : {}),
       ...(options.policyManager ? { policyManager: options.policyManager } : {}),
       ...(options.systemUpdate ? { systemUpdate: options.systemUpdate } : {}),
+      ...(options.providerManagement ? { providerManagement: options.providerManagement } : {}),
     });
   }
 

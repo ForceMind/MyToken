@@ -24,32 +24,44 @@ async function fixture() {
 }
 
 describe("SystemUpdateService", () => {
-  it("fetches only the preview dist-tag with strict validation", async () => {
+  it("fetches the newest valid GitHub release tag with strict validation and caching", async () => {
     const paths = await fixture();
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({ "dist-tags": { preview: "1.2.3-preview.4" } }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+      new Response(
+        JSON.stringify([
+          { name: "not-a-release", commit: { sha: "f".repeat(40) } },
+          { name: "v1.2.3-preview.3", commit: { sha: "a".repeat(40) } },
+          { name: "v1.2.3-preview.4", commit: { sha: "b".repeat(40) } },
+        ]),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
     );
     const service = new SystemUpdateService({ ...paths, fetchImpl });
-    await expect(service.getLatestVersion()).resolves.toMatchObject({ version: "1.2.3-preview.4" });
+    await expect(service.getLatestVersion()).resolves.toMatchObject({
+      source: "github",
+      repository: "ForceMind/MyToken",
+      tag: "v1.2.3-preview.4",
+      version: "1.2.3-preview.4",
+      commitSha: "b".repeat(40),
+    });
+    await service.getLatestVersion();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(fetchImpl).toHaveBeenCalledWith(
-      new URL("https://registry.npmjs.org/mytoken-gateway"),
+      new URL("https://api.github.com/repos/ForceMind/MyToken/tags?per_page=100"),
       expect.objectContaining({ method: "GET", signal: expect.any(AbortSignal) }),
     );
   });
 
-  it("rejects an insecure registry and malformed registry response", async () => {
+  it("rejects an insecure GitHub API and malformed tag response", async () => {
     const paths = await fixture();
     expect(
-      () => new SystemUpdateService({ ...paths, registryUrl: "http://registry.example" }),
+      () => new SystemUpdateService({ ...paths, githubApiUrl: "http://github.example" }),
     ).toThrow("HTTPS");
     const service = new SystemUpdateService({
       ...paths,
-      fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(new Response('{"dist-tags":{}}')),
+      fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(new Response("{}")),
     });
-    await expect(service.getLatestVersion()).rejects.toThrow("valid preview version");
+    await expect(service.getLatestVersion()).rejects.toThrow("invalid shape");
   });
 
   it("returns bounded safe status and idle when it does not exist", async () => {

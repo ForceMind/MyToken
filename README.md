@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-MyToken Gateway is a private, single-administrator AI model gateway for a trusted Linux server. It can use a server-local Codex/ChatGPT login and optional Anthropic, DeepSeek, or other OpenAI Responses-compatible providers, then issue restricted MyToken API keys to your own clients.
+MyToken Gateway is a private, single-administrator AI model gateway for a trusted Linux server. It can use a server-local Codex/ChatGPT login and optional Anthropic, DeepSeek, OpenAI Chat Completions, or OpenAI Responses-compatible providers, then issue restricted MyToken API keys to your own clients.
 
 > MyToken is independent and is not affiliated with, endorsed by, or operated by OpenAI, Anthropic, or DeepSeek.
 
@@ -28,22 +28,12 @@ MyToken Gateway is a private, single-administrator AI model gateway for a truste
 
 The installer supports OpenCloudOS/RHEL/Fedora and Debian/Ubuntu package tooling. The API binds to `127.0.0.1:8080` by default.
 
-## Install with npm — recommended
-
-```bash
-sudo env \
-  npm_config_registry=https://registry.npmjs.org \
-  npx --yes mytoken-gateway@preview install
-```
-
-The npm package is a small bootstrap CLI. It resolves its matching immutable Git tag, verifies npm integrity and published Git commit metadata, then runs the repository installer.
-
-## Install from GitHub
+## Install from GitHub — current development channel
 
 Release tag, recommended for repeatable installation:
 
 ```bash
-sudo git clone --branch v0.1.0-preview.7 --depth 1 \
+sudo git clone --branch v0.1.0-preview.8 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -83,26 +73,25 @@ sudo mytokenctl codex-status
 sudo mytokenctl codex-login
 ```
 
-## Add Claude or DeepSeek
+## Add Claude, DeepSeek, or another provider
 
 Each external provider requires its own upstream API key; a Codex login cannot authorize Claude or DeepSeek.
 
-```bash
-sudo mytokenctl provider-set anthropic
-sudo mytokenctl provider-set deepseek
-sudo mytokenctl provider-status
-```
+Open **System → Model Providers**, choose Claude or DeepSeek, and enter its upstream API Key. Use **Add compatible provider** for another Anthropic Messages, OpenAI Chat Completions, or OpenAI Responses endpoint. Keys are written to protected server files and never returned to the browser.
+
+Terminal configuration remains available through `mytokenctl provider-set`.
 
 Model ids are exposed as bare ids for Codex, `anthropic/<model-id>` for Claude, `deepseek/<model-id>` for DeepSeek, and `<provider>/<model-id>` for configured compatible providers. See [Model Providers](docs/PROVIDERS.md).
 
 ## Update
 
-After preview.3 or newer is installed, use **System → System update** in the management console, or run:
+After preview.8 is installed, **System → System update** discovers and installs the latest immutable GitHub tag without npm. To install preview.8 over an older release for the first time, run:
 
 ```bash
-sudo env \
-  npm_config_registry=https://registry.npmjs.org \
-  npx --yes mytoken-gateway@preview update
+cd /srv/mytoken-src
+sudo git fetch --force --tags origin
+sudo git checkout --detach v0.1.0-preview.8
+sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 
 Updates are single-flight, back up and integrity-check SQLite, verify exact release metadata, and treat the runtime plus release-derived environment values as one rollback unit. Completion requires matching source, deployed-package, configured-environment, API, and UI versions.

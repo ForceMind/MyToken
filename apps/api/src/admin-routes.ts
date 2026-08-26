@@ -13,6 +13,7 @@ import {
 import { openAiError } from "@mytoken/openai-compat";
 
 import type { ApiKeyStore } from "./app.js";
+import type { ManagedProviderInput, ManagedProviderView } from "./provider-management-service.js";
 import { validateIpAllowlist } from "./request-policy.js";
 import type { RequestPolicyManager } from "./request-policy.js";
 import type { GatewayUsageStore } from "./usage-store.js";
@@ -56,6 +57,10 @@ export interface RegisterAdminRoutesOptions {
   usageStore?: GatewayUsageStore;
   policyManager?: RequestPolicyManager;
   systemUpdate?: SystemUpdateService;
+  providerManagement?: {
+    list(): Promise<readonly ManagedProviderView[]>;
+    upsert(input: ManagedProviderInput): Promise<ManagedProviderView>;
+  };
 }
 
 const setupSchema = z
@@ -93,6 +98,17 @@ const updateKeySchema = createKeySchema
   .omit({ mode: true, name: true })
   .partial()
   .refine((value) => Object.keys(value).length > 0);
+
+const providerInputSchema = z
+  .object({
+    name: z.string().min(1).max(64),
+    protocol: z.enum(["anthropic", "openai-responses", "openai-chat"]),
+    baseUrl: z.string().url().max(2048),
+    enabled: z.boolean(),
+    models: z.array(z.string().min(1).max(256)).max(256),
+    apiKey: z.string().min(8).max(8192).optional(),
+  })
+  .strict();
 
 export function registerAdminRoutes(
   app: FastifyInstance,
@@ -323,6 +339,62 @@ export function registerAdminRoutes(
         }
         const requested = await systemUpdate.requestUpdate();
         return reply.code(202).send({ requested });
+      },
+    );
+  }
+
+  const providerManagement = options.providerManagement;
+  if (providerManagement) {
+    app.get("/api/admin/provider-configs", async (request, reply) => {
+      noStore(reply);
+      const session = authenticateAdmin(request, reply, options, cookieName);
+      if (!session) return;
+      return { data: await providerManagement.list() };
+    });
+    app.put(
+      "/api/admin/provider-configs/:providerId",
+      { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } },
+      async (request, reply) => {
+        noStore(reply);
+        const session = authenticateAdmin(request, reply, options, cookieName, true);
+        if (!session) return;
+        if (!sameOrigin(request)) {
+          return adminError(reply, 403, "Provider request origin was rejected", "invalid_origin");
+        }
+        const params = request.params as { providerId?: string };
+        const parsed = providerInputSchema.safeParse(request.body);
+        if (
+          !params.providerId ||
+          !/^[a-z][a-z0-9_-]{1,31}$/u.test(params.providerId) ||
+          params.providerId === "codex" ||
+          !parsed.success
+        ) {
+          return adminError(
+            reply,
+            400,
+            "Invalid provider configuration",
+            "invalid_provider_config",
+          );
+        }
+        try {
+          const provider = await providerManagement.upsert({
+            id: params.providerId,
+            name: parsed.data.name,
+            protocol: parsed.data.protocol,
+            baseUrl: parsed.data.baseUrl,
+            enabled: parsed.data.enabled,
+            models: parsed.data.models,
+            ...(parsed.data.apiKey !== undefined ? { apiKey: parsed.data.apiKey } : {}),
+          });
+          return { provider };
+        } catch {
+          return adminError(
+            reply,
+            400,
+            "Provider configuration could not be applied",
+            "provider_config_failed",
+          );
+        }
       },
     );
   }

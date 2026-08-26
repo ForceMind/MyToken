@@ -6,31 +6,12 @@
 
 需要使用 systemd 的 Linux 服务器、Node.js 22.13 或更新版本、npm，以及 root/sudo 权限。MyToken 不会在 macOS 或 Windows 上安装系统服务。
 
-## 方式 A：通过 npm 引导安装——推荐
-
-```bash
-sudo env \
-  npm_config_registry=https://registry.npmjs.org \
-  npx --yes mytoken-gateway@preview install
-```
-
-引导包会：
-
-1. 解析精确的 npm preview 版本；
-2. 将对应 Git Tag checkout 到 `/srv/mytoken-src`；
-3. 校验 npm integrity、发布的 `gitHead`、源码 Origin 和 Commit；
-4. 必要时安装固定兼容版本的 Codex CLI；
-5. 执行格式、类型、Lint、测试、数据库、协议和构建检查；
-6. 安装并启动 systemd 服务。
-
-如果服务器使用同步较慢的 npm 镜像，请保留命令中的 `npm_config_registry`。
-
-## 方式 B：通过 GitHub 源码安装
+## 通过 GitHub 源码安装——当前通道
 
 使用固定发布版本：
 
 ```bash
-sudo git clone --branch v0.1.0-preview.7 --depth 1 \
+sudo git clone --branch v0.1.0-preview.8 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -45,7 +26,7 @@ cd /srv/mytoken-src
 sudo ./deploy/install.sh
 ```
 
-GitHub 安装与 npm 引导使用同一套测试、备份、运行时暂存、systemd、健康检查和回滚逻辑。
+安装器会执行格式、类型、Lint、测试、数据库、Codex 协议、构建、备份、运行时暂存、systemd、版本一致性、健康检查和回滚门禁。
 
 ## 第一次访问
 
@@ -72,7 +53,7 @@ sudo mytokenctl codex-status
 sudo mytokenctl codex-login
 ```
 
-可选外部 Provider：
+外部 Provider 可直接在“系统 → 模型 Providers”配置。页面支持 Claude、DeepSeek，以及自定义 Anthropic Messages、OpenAI Chat Completions 或 OpenAI Responses 服务。终端配置仍然可用：
 
 ```bash
 sudo mytokenctl provider-set anthropic
@@ -82,12 +63,13 @@ sudo mytokenctl provider-status
 
 ## 更新
 
-可以在管理台使用“系统 → 系统更新”，也可以运行：
+安装 preview.8 后，直接使用管理台“系统 → 系统更新”。特权更新器只从 GitHub `ForceMind/MyToken` 获取并校验不可变 Tag，不再查询或执行 npm。从旧的 npm 更新版本首次升级时执行：
 
 ```bash
-sudo env \
-  npm_config_registry=https://registry.npmjs.org \
-  npx --yes mytoken-gateway@preview update
+cd /srv/mytoken-src
+sudo git fetch --force --tags origin
+sudo git checkout --detach v0.1.0-preview.8
+sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 
 更新器会拒绝存在未提交修改的源码目录，校验拉取后的目标版本并创建一致性 SQLite 备份。任何部署失败都会同时恢复旧运行目录与发布派生环境变量；只有源码、部署包、环境变量、`/versionz`、`/version.json` 和实际 UI 入口版本一致才会报告成功。

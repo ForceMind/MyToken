@@ -11,7 +11,7 @@
     Key / 策略 / 日志 / SQLite / Provider Router
            |                         |
            | Unix Socket             +--> Anthropic Messages API
-           v                         +--> DeepSeek / 其他 Responses API
+           v                         +--> DeepSeek Chat / 其他 Chat 或 Responses API
       mytoken-worker
       协议适配 / 工具桥
            |

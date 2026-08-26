@@ -18,8 +18,8 @@ export interface RoutedExternalProvider {
 
 export class MultiProviderGatewayBackend implements GatewayBackend, CodexAdminBackend {
   readonly #codex: GatewayBackend & CodexAdminBackend;
-  readonly #external = new Map<string, RoutedExternalProvider>();
-  readonly #configurationStatuses: readonly ProviderConfigurationStatus[];
+  #external = new Map<string, RoutedExternalProvider>();
+  #configurationStatuses: readonly ProviderConfigurationStatus[];
   #lastProbeAt = 0;
   #lastProbeReady = false;
 
@@ -30,37 +30,56 @@ export class MultiProviderGatewayBackend implements GatewayBackend, CodexAdminBa
   }) {
     this.#codex = options.codex;
     this.#configurationStatuses = options.configurationStatuses ?? [];
-    for (const provider of options.external ?? []) {
-      if (
-        provider.backend.providerId === "codex" ||
-        this.#external.has(provider.backend.providerId)
-      ) {
+    this.#replaceExternal(options.external ?? []);
+  }
+
+  replaceExternal(options: {
+    external: readonly RoutedExternalProvider[];
+    configurationStatuses: readonly ProviderConfigurationStatus[];
+  }): void {
+    this.#replaceExternal(options.external);
+    this.#configurationStatuses = options.configurationStatuses;
+    this.#lastProbeAt = 0;
+    this.#lastProbeReady = false;
+  }
+
+  #replaceExternal(providers: readonly RoutedExternalProvider[]): void {
+    const replacement = new Map<string, RoutedExternalProvider>();
+    for (const provider of providers) {
+      if (provider.backend.providerId === "codex" || replacement.has(provider.backend.providerId)) {
         throw new MyTokenError(
           "duplicate_provider",
           `Duplicate or reserved provider id: ${provider.backend.providerId}`,
         );
       }
-      this.#external.set(provider.backend.providerId, provider);
+      replacement.set(provider.backend.providerId, provider);
     }
+    this.#external = replacement;
   }
 
   isReady(): boolean {
-    return (
-      this.#codex.isReady() || [...this.#external.values()].some(({ backend }) => backend.isReady())
-    );
+    return this.#lastProbeReady;
   }
 
   async probe(): Promise<boolean> {
     if (Date.now() - this.#lastProbeAt < 10_000) return this.#lastProbeReady;
     const results = await Promise.allSettled([
-      this.#codex.probe ? this.#codex.probe() : Promise.resolve(this.#codex.isReady()),
-      ...[...this.#external.values()].map(({ backend }) => backend.probe?.() ?? backend.isReady()),
+      boundedProbe(this.#probeCodex()),
+      ...[...this.#external.values()].map(({ backend }) =>
+        boundedProbe(Promise.resolve(backend.probe?.() ?? backend.isReady())),
+      ),
     ]);
     this.#lastProbeAt = Date.now();
     this.#lastProbeReady = results.some(
       (result) => result.status === "fulfilled" && result.value === true,
     );
     return this.#lastProbeReady;
+  }
+
+  async #probeCodex(): Promise<boolean> {
+    const workerReady = this.#codex.probe ? await this.#codex.probe() : this.#codex.isReady();
+    if (!workerReady) return false;
+    return (await safeAccount(this.#codex)).connected;
   }
 
   async listModels(): Promise<readonly GatewayModel[]> {
@@ -142,15 +161,25 @@ export class MultiProviderGatewayBackend implements GatewayBackend, CodexAdminBa
 
   async providerStatuses(): Promise<readonly GatewayProviderStatus[]> {
     const statuses: GatewayProviderStatus[] = [];
-    const codexModels = await safeModels(this.#codex);
+    const [codexModels, codexAccount] = await Promise.all([
+      safeModels(this.#codex),
+      safeAccount(this.#codex),
+    ]);
+    const codexReady = codexModels.ok && codexAccount.ok && codexAccount.connected;
     statuses.push({
       id: "codex",
       name: "Codex",
       protocol: "codex-app-server",
       enabled: true,
-      ready: codexModels.ok,
+      ready: codexReady,
       modelsCount: codexModels.models.length,
-      error: codexModels.ok ? null : "codex_unavailable",
+      error: !codexAccount.ok
+        ? "codex_unavailable"
+        : !codexAccount.connected
+          ? "codex_not_authenticated"
+          : codexModels.ok
+            ? null
+            : "codex_models_unavailable",
     });
     for (const { backend, protocol } of this.#external.values()) {
       const models = await safeModels(backend);
@@ -199,6 +228,18 @@ export class MultiProviderGatewayBackend implements GatewayBackend, CodexAdminBa
   }
 }
 
+async function safeAccount(backend: CodexAdminBackend): Promise<{
+  ok: boolean;
+  connected: boolean;
+}> {
+  try {
+    const value = await backend.account();
+    return { ok: true, connected: isRecord(value) && isRecord(value.account) };
+  } catch {
+    return { ok: false, connected: false };
+  }
+}
+
 export function resolveProviderModel(model: string): {
   providerId: string;
   upstreamModel: string;
@@ -216,8 +257,44 @@ async function safeModels(backend: GatewayBackend): Promise<{
   models: readonly GatewayModel[];
 }> {
   try {
-    return { ok: true, models: await backend.listModels() };
+    const models = await boundedModels(backend.listModels());
+    return models ? { ok: true, models } : { ok: false, models: [] };
   } catch {
     return { ok: false, models: [] };
+  }
+}
+
+async function boundedModels(
+  models: Promise<readonly GatewayModel[]>,
+  timeoutMs = 5_000,
+): Promise<readonly GatewayModel[] | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      models,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function boundedProbe(probe: Promise<boolean>, timeoutMs = 5_000): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      probe,
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

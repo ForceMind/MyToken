@@ -4,9 +4,9 @@
 
 ## Start here
 
-- [Installation](INSTALLATION.md) — npm and GitHub installation, first access, and updates
+- [Installation](INSTALLATION.md) — GitHub installation, first access, and updates
 - [Terminal operations](OPERATIONS.md) — services, logs, backup, Codex, providers, and recovery
-- [Model providers](PROVIDERS.md) — Codex, Claude, DeepSeek, and custom Responses providers
+- [Model providers](PROVIDERS.md) — Codex, Claude, DeepSeek, and custom Chat/Responses providers
 - [API compatibility](API_COMPATIBILITY.md) — supported public API subset
 
 ## Design and security

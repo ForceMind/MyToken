@@ -1,4 +1,5 @@
 const csrfStorageKey = "mytoken.csrf";
+export const adminSessionInvalidEvent = "mytoken:admin-session-invalid";
 
 export class ApiError extends Error {
   constructor(
@@ -20,12 +21,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { ...init, headers, credentials: "same-origin" });
   const body = response.status === 204 ? undefined : ((await response.json()) as unknown);
   if (!response.ok) {
-    if (response.status === 401) sessionStorage.removeItem(csrfStorageKey);
     const error = isRecord(body) && isRecord(body.error) ? body.error : undefined;
+    const code = error && typeof error.code === "string" ? error.code : undefined;
+    if (response.status === 401 || code === "admin_request_rejected") {
+      sessionStorage.removeItem(csrfStorageKey);
+      window.dispatchEvent(new Event(adminSessionInvalidEvent));
+    }
     throw new ApiError(
       response.status,
       error && typeof error.message === "string" ? error.message : "Request failed",
-      error && typeof error.code === "string" ? error.code : undefined,
+      code,
     );
   }
   return body as T;
@@ -55,6 +60,13 @@ export const api = {
   keys: () => request<{ data: ApiKeySummary[] }>("/api/admin/keys"),
   models: () => request<{ data: GatewayModel[] }>("/api/admin/models"),
   providers: () => request<{ data: GatewayProviderStatus[] }>("/api/admin/providers"),
+  providerConfigs: () => request<{ data: ManagedProvider[] }>("/api/admin/provider-configs"),
+  upsertProvider: (providerId: string, input: ManagedProviderInput) =>
+    request<{ provider: ManagedProvider }>(
+      `/api/admin/provider-configs/${encodeURIComponent(providerId)}`,
+      { method: "PUT", body: JSON.stringify(input) },
+    ),
+  hasAdminCsrf: () => Boolean(sessionStorage.getItem(csrfStorageKey)),
   requests: (keyId?: string) =>
     request<{ data: GatewayRequestLog[] }>(
       `/api/admin/requests?limit=100${keyId ? `&keyId=${encodeURIComponent(keyId)}` : ""}`,
@@ -223,6 +235,26 @@ export interface GatewayProviderStatus {
   error: string | null;
 }
 
+export interface ManagedProvider {
+  id: string;
+  name: string;
+  protocol: "anthropic" | "openai-responses" | "openai-chat";
+  baseUrl: string;
+  enabled: boolean;
+  models: string[];
+  apiKeyConfigured: boolean;
+  status: string | null;
+}
+
+export interface ManagedProviderInput {
+  name: string;
+  protocol: ManagedProvider["protocol"];
+  baseUrl: string;
+  enabled: boolean;
+  models: string[];
+  apiKey?: string;
+}
+
 export interface KeyUsage {
   totalRequests: number;
   billableRequests: number;
@@ -273,9 +305,11 @@ export interface GatewayResponse {
 export interface SystemUpdateInfo {
   currentVersion: string | null;
   latest: {
-    packageName: string;
-    distTag: string;
+    source: "github";
+    repository: string;
+    tag: string;
     version: string;
+    commitSha: string;
     fetchedAt: string;
   };
   status: {

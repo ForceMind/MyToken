@@ -2,6 +2,8 @@
 Description=MyToken Codex Worker
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -12,8 +14,6 @@ Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/bin/env node /opt/mytoken/apps/worker/dist/main.js
 Restart=on-failure
 RestartSec=5s
-StartLimitIntervalSec=60
-StartLimitBurst=5
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true

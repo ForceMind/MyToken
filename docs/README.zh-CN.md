@@ -6,7 +6,7 @@
 
 - [安装指南](INSTALLATION.zh-CN.md)——npm、GitHub 安装、首次访问和更新
 - [终端运维](OPERATIONS.zh-CN.md)——服务、日志、备份、Codex、Provider 和恢复
-- [模型 Provider](PROVIDERS.zh-CN.md)——Codex、Claude、DeepSeek 和自定义 Responses Provider
+- [模型 Provider](PROVIDERS.zh-CN.md)——Codex、Claude、DeepSeek 和自定义 Chat/Responses Provider
 - [API 兼容性](API_COMPATIBILITY.zh-CN.md)——公开 API 支持范围
 
 ## 设计与安全

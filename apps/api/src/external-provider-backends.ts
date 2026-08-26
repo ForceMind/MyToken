@@ -125,11 +125,105 @@ export class OpenAIResponsesProviderBackend implements ExternalProviderBackend {
   }
 }
 
+/** A provider using the OpenAI Chat Completions wire format, including DeepSeek. */
+export class OpenAIChatProviderBackend implements ExternalProviderBackend {
+  readonly providerId: string;
+  readonly providerName: string;
+  readonly #baseUrl: string;
+  readonly #apiKey: string;
+  readonly #timeoutMs: number;
+  readonly #maxResponseBytes: number;
+  readonly #fetch: typeof globalThis.fetch;
+  readonly #configuredModels: readonly string[];
+
+  constructor(options: ExternalProviderBackendOptions) {
+    validateOptions(options);
+    this.providerId = options.id;
+    this.providerName = options.name;
+    this.#baseUrl = options.baseUrl.replace(/\/+$/u, "");
+    this.#apiKey = options.apiKey;
+    this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.#maxResponseBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
+    this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#configuredModels = options.models ?? [];
+  }
+
+  isReady(): boolean {
+    return Boolean(this.#apiKey);
+  }
+
+  async probe(): Promise<boolean> {
+    try {
+      await this.listModels();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async listModels(): Promise<readonly GatewayModel[]> {
+    if (this.#configuredModels.length > 0) {
+      return this.#configuredModels.map((id) => this.#model(id, id));
+    }
+    const body = await requestJson(
+      this.#fetch,
+      `${this.#baseUrl}/models`,
+      this.#apiKey,
+      { method: "GET" },
+      this.#timeoutMs,
+      this.#maxResponseBytes,
+    );
+    if (!isRecord(body) || !Array.isArray(body.data)) {
+      throw new MyTokenError(
+        "invalid_provider_response",
+        "Provider returned an invalid model list",
+      );
+    }
+    return body.data.map((value) => {
+      if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0) {
+        throw new MyTokenError("invalid_provider_response", "Provider returned a malformed model");
+      }
+      return this.#model(value.id, modelName(value));
+    });
+  }
+
+  async createResponse(
+    request: CreateResponseRequest,
+    context: { apiKeyId: string; signal?: AbortSignal },
+  ): Promise<GatewayResponse> {
+    const body = await requestJson(
+      this.#fetch,
+      `${this.#baseUrl}/chat/completions`,
+      this.#apiKey,
+      {
+        method: "POST",
+        body: JSON.stringify(toOpenAIChatRequest(request, this.providerId)),
+        ...(context.signal ? { signal: context.signal } : {}),
+      },
+      this.#timeoutMs,
+      this.#maxResponseBytes,
+    );
+    return parseOpenAIChatResponse(body, request.model);
+  }
+
+  #model(upstreamId: string, displayName: string): GatewayModel {
+    return {
+      id: `${this.providerId}/${upstreamId}`,
+      displayName,
+      providerId: this.providerId,
+      providerName: this.providerName,
+      upstreamModel: upstreamId,
+      supportsTools: false,
+      supportsStreaming: false,
+    };
+  }
+}
+
 export function createDeepSeekBackend(
   apiKey: string,
   options: Partial<Omit<ExternalProviderBackendOptions, "id" | "name" | "baseUrl" | "apiKey">> = {},
-): OpenAIResponsesProviderBackend {
-  return new OpenAIResponsesProviderBackend({
+): OpenAIChatProviderBackend {
+  return new OpenAIChatProviderBackend({
     id: "deepseek",
     name: "DeepSeek",
     baseUrl: "https://api.deepseek.com",
@@ -303,6 +397,43 @@ function toOpenAIRequest(
   return body;
 }
 
+function toOpenAIChatRequest(
+  request: CreateResponseRequest,
+  providerId: string,
+): Record<string, unknown> {
+  if (request.previous_response_id || request.tools?.length) {
+    throw new MyTokenError(
+      "openai_chat_feature_unsupported",
+      "This Chat Completions provider currently supports text messages only",
+    );
+  }
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [];
+  if (request.instructions) messages.push({ role: "system", content: request.instructions });
+  if (typeof request.input === "string") {
+    messages.push({ role: "user", content: request.input });
+  } else {
+    for (const item of request.input) {
+      if (item.type !== "message") {
+        throw new MyTokenError(
+          "openai_chat_feature_unsupported",
+          "This Chat Completions provider only supports message input",
+        );
+      }
+      const role = item.role === "developer" ? "system" : item.role;
+      messages.push({
+        role,
+        content: typeof item.content === "string" ? item.content : textFromContent(item.content),
+      });
+    }
+  }
+  return {
+    model: stripModelPrefix(request.model, providerId),
+    messages,
+    stream: false,
+    ...(request.max_output_tokens ? { max_tokens: request.max_output_tokens } : {}),
+  };
+}
+
 function toAnthropicRequest(
   request: CreateResponseRequest,
   providerId: string,
@@ -359,6 +490,39 @@ function parseOpenAIResponse(value: unknown, requestedModel: string): GatewayRes
     model: requestedModel,
     output,
     usage,
+  });
+}
+
+function parseOpenAIChatResponse(value: unknown, requestedModel: string): GatewayResponse {
+  if (!isRecord(value) || !Array.isArray(value.choices)) {
+    throw new MyTokenError("invalid_provider_response", "Chat provider response is invalid");
+  }
+  const choices = value.choices as unknown[];
+  const first: unknown = choices[0];
+  const message = isRecord(first) && isRecord(first.message) ? first.message : undefined;
+  if (!message || typeof message.content !== "string") {
+    throw new MyTokenError("invalid_provider_response", "Chat provider returned no text message");
+  }
+  const usage = isRecord(value.usage)
+    ? {
+        input_tokens: value.usage.prompt_tokens,
+        output_tokens: value.usage.completion_tokens,
+        total_tokens: value.usage.total_tokens,
+      }
+    : undefined;
+  return createGatewayResponse({
+    id: `resp_myt_${crypto.randomUUID()}`,
+    model: requestedModel,
+    output: [
+      {
+        type: "message",
+        id: `msg_myt_${crypto.randomUUID()}`,
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text: message.content, annotations: [] }],
+      },
+    ],
+    usage: parseUsage(usage),
   });
 }
 
