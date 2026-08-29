@@ -33,7 +33,7 @@ The installer supports OpenCloudOS/RHEL/Fedora and Debian/Ubuntu package tooling
 Release tag, recommended for repeatable installation:
 
 ```bash
-sudo git clone --branch v0.1.0-preview.9 --depth 1 \
+sudo git clone --branch v0.1.0-preview.10 --depth 1 \
   https://github.com/ForceMind/MyToken.git /srv/mytoken-src
 cd /srv/mytoken-src
 sudo ./deploy/install.sh
@@ -93,7 +93,7 @@ After preview.8 is installed, **System → System update** discovers and install
 ```bash
 cd /srv/mytoken-src
 sudo git fetch --force --tags origin
-sudo git checkout --detach v0.1.0-preview.9
+sudo git checkout --detach v0.1.0-preview.10
 sudo env MYTOKEN_SOURCE_DIR=/srv/mytoken-src ./deploy/install.sh
 ```
 

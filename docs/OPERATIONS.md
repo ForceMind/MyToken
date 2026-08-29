@@ -108,7 +108,7 @@ journalctl -u mytoken-update.service
 cd /srv/mytoken-src
 git status --short --branch
 git fetch --force --tags origin
-git checkout --detach v0.1.0-preview.9
+git checkout --detach v0.1.0-preview.10
 sudo mytokenctl deploy /srv/mytoken-src
 ```
 

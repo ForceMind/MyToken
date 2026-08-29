@@ -44,7 +44,7 @@ Create `/etc/mytoken/mytoken.env` owned by root and mode `0640`:
 
 ```text
 NODE_ENV=production
-MYTOKEN_VERSION=0.1.0-preview.9
+MYTOKEN_VERSION=0.1.0-preview.10
 MYTOKEN_HOST=127.0.0.1
 MYTOKEN_PORT=8080
 MYTOKEN_WEB_ROOT=/opt/mytoken/apps/web/dist
